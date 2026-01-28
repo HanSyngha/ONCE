@@ -65,7 +65,6 @@ services:
       redis:
         condition: service_healthy
     environment:
-      <<: *proxy-env
       NODE_ENV: production
       PORT: 16002
       DATABASE_URL: postgresql://${POSTGRES_USER:-aipo}:${POSTGRES_PASSWORD:-aipo_secret}@postgres:5432/${POSTGRES_DB:-aipo_web}

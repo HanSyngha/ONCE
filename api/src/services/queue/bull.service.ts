@@ -13,11 +13,16 @@ import { emitQueueUpdate, emitRequestComplete, emitRequestFailed } from '../../w
 const QUEUE_NAME = 'aipo-requests';
 const MAX_CONCURRENT_JOBS = 20;
 
-// BullMQ 연결 설정
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '16004', 10),
-};
+// BullMQ 연결 설정 (REDIS_URL 파싱)
+function getRedisConnection() {
+  const redisUrl = process.env.REDIS_URL || 'redis://localhost:16004';
+  const url = new URL(redisUrl);
+  return {
+    host: url.hostname,
+    port: parseInt(url.port || '6379', 10),
+  };
+}
+const connection = getRedisConnection();
 
 // 큐 생성
 let queue: Queue | null = null;
