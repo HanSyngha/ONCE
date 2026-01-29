@@ -434,10 +434,10 @@ export async function runAgentLoop(
       const assistantMessage = choice.message;
 
       // Assistant 메시지 히스토리에 추가
-      // content는 null이라도 반드시 포함해야 함 (litellm 422 방지)
+      // content는 빈 문자열이라도 반드시 포함해야 함 (vLLM/litellm 422 방지)
       messages.push({
         role: 'assistant',
-        content: assistantMessage.content || null,
+        content: assistantMessage.content ?? '',
         tool_calls: assistantMessage.tool_calls,
       });
 
