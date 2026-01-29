@@ -89,7 +89,7 @@ const MAX_ITERATIONS = 100;
 
 interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content?: string;
+  content?: string | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -379,9 +379,10 @@ export async function runAgentLoop(
       const assistantMessage = choice.message;
 
       // Assistant 메시지 히스토리에 추가
+      // content는 null이라도 반드시 포함해야 함 (litellm 422 방지)
       messages.push({
         role: 'assistant',
-        content: assistantMessage.content || undefined,
+        content: assistantMessage.content || null,
         tool_calls: assistantMessage.tool_calls,
       });
 

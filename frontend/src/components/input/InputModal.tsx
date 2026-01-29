@@ -3,6 +3,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { requestsApi } from '../../services/api';
+import RatingPopup, { shouldShowRating } from '../common/RatingPopup';
 import {
   subscribeToRequest,
   on,
@@ -109,6 +110,8 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
   const [progressMessage, setProgressMessage] = useState('');
   const [result, setResult] = useState<RequestComplete['result'] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showRating, setShowRating] = useState(false);
+  const [ratingModel, setRatingModel] = useState('');
 
   useEffect(() => {
     if (isOpen && textareaRef.current) {
@@ -150,6 +153,12 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
         setResult(data.result || null);
         setProgress(100);
         refresh(); // Refresh the tree
+
+        // 2회 요청마다 평가 팝업 표시
+        if (shouldShowRating()) {
+          setRatingModel((data as any).modelName || 'unknown');
+          setTimeout(() => setShowRating(true), 800);
+        }
       } else {
         setStatus('failed');
         setError(data.error || t.error);
@@ -410,6 +419,7 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
   };
 
   return (
+    <>
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
         <Transition.Child
@@ -463,5 +473,12 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
         </div>
       </Dialog>
     </Transition>
+
+    <RatingPopup
+      isOpen={showRating}
+      onClose={() => setShowRating(false)}
+      modelName={ratingModel}
+    />
+    </>
   );
 }

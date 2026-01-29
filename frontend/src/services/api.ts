@@ -151,6 +151,18 @@ export const adminApi = {
     api.put('/admin/model-config', config),
 };
 
+// ==================== Rating API (Dashboard) ====================
+const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || 'http://a2g.samsungds.net:4090';
+
+export const ratingApi = {
+  submit: (modelName: string, rating: number) =>
+    axios.post(`${DASHBOARD_URL}/api/rating`, {
+      modelName,
+      rating,
+      serviceId: 'aipo-web',
+    }),
+};
+
 // ==================== Settings API ====================
 export const settingsApi = {
   get: () => api.get('/settings'),

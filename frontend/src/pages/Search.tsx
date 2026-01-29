@@ -5,6 +5,7 @@ import { useSpaceStore } from '../stores/spaceStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { requestsApi } from '../services/api';
 import { showToast } from '../components/common/Toast';
+import RatingPopup, { shouldShowRating } from '../components/common/RatingPopup';
 import EmptyState from '../components/common/EmptyState';
 import { LanguageBadge } from '../components/common/Badge';
 import {
@@ -92,6 +93,7 @@ export default function Search() {
   const [hasSearched, setHasSearched] = useState(false);
   const [spaceFilter, setSpaceFilter] = useState<'all' | 'personal' | 'team'>('all');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showRating, setShowRating] = useState(false);
 
   const personalSpaceId = user?.spaces?.personalSpaceId;
   const teamSpaceId = user?.spaces?.teamSpaceId;
@@ -147,6 +149,11 @@ export default function Search() {
     try {
       const response = await requestsApi.search(spaceId, q.trim());
       setResults(response.data.results || []);
+
+      // 2회 요청마다 평가 팝업 표시
+      if (shouldShowRating()) {
+        setTimeout(() => setShowRating(true), 600);
+      }
     } catch (error) {
       console.error('Search failed:', error);
       showToast.error('Search failed');
@@ -194,6 +201,7 @@ export default function Search() {
   });
 
   return (
+    <>
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
@@ -358,5 +366,12 @@ export default function Search() {
         )
       )}
     </div>
+
+    <RatingPopup
+      isOpen={showRating}
+      onClose={() => setShowRating(false)}
+      modelName="unknown"
+    />
+    </>
   );
 }
