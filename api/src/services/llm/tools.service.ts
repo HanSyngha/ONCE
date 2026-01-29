@@ -597,47 +597,35 @@ async function listFolder(spaceId: string, path: string): Promise<ToolResult> {
   const normalizedPath = normalizePath(path);
   const isRoot = normalizedPath === '/';
 
-  // 직계 자식 폴더 조회
-  const childFolders = await prisma.folder.findMany({
-    where: {
-      spaceId,
-      parentId: isRoot ? null : undefined,
-      ...(isRoot ? {} : {
-        path: { startsWith: normalizedPath + '/' },
-      }),
-    },
+  // 부모 폴더 ID 결정
+  let parentId: string | null = null;
+  if (!isRoot) {
+    const parentFolder = await prisma.folder.findUnique({
+      where: { spaceId_path: { spaceId, path: normalizedPath } },
+    });
+    if (!parentFolder) {
+      return { success: false, message: `Folder not found: ${normalizedPath}`, error: 'NOT_FOUND' };
+    }
+    parentId = parentFolder.id;
+  }
+
+  // 직계 자식 폴더 조회 (parentId로 직접 조회 — 효율적)
+  const directChildFolders = await prisma.folder.findMany({
+    where: { spaceId, parentId: isRoot ? null : parentId },
     select: { path: true, name: true },
     orderBy: { name: 'asc' },
   });
 
-  // 직계만 필터 (depth가 정확히 1단계 더 깊은 것만)
-  const targetDepth = isRoot ? 1 : normalizedPath.split('/').filter(Boolean).length + 1;
-  const directChildFolders = childFolders.filter(f => {
-    const depth = f.path.split('/').filter(Boolean).length;
-    return depth === targetDepth;
-  });
-
   // 직계 자식 파일 조회
-  let directChildFiles;
-  if (isRoot) {
-    directChildFiles = await prisma.file.findMany({
-      where: { spaceId, folderId: null, deletedAt: null },
-      select: { path: true, name: true, id: true },
-      orderBy: { name: 'asc' },
-    });
-  } else {
-    const folder = await prisma.folder.findUnique({
-      where: { spaceId_path: { spaceId, path: normalizedPath } },
-    });
-    if (!folder) {
-      return { success: false, message: `Folder not found: ${normalizedPath}`, error: 'NOT_FOUND' };
-    }
-    directChildFiles = await prisma.file.findMany({
-      where: { spaceId, folderId: folder.id, deletedAt: null },
-      select: { path: true, name: true, id: true },
-      orderBy: { name: 'asc' },
-    });
-  }
+  const directChildFiles = await prisma.file.findMany({
+    where: {
+      spaceId,
+      folderId: isRoot ? null : parentId,
+      deletedAt: null,
+    },
+    select: { path: true, name: true, id: true },
+    orderBy: { name: 'asc' },
+  });
 
   const folders = directChildFolders.map(f => `📁 ${f.name}`);
   const files = directChildFiles.map(f => `📄 ${f.name} (${f.path})`);
