@@ -16,7 +16,6 @@ import { sendFailureEmail } from '../mail.service.js';
 // LLM Proxy 설정
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || 'http://localhost:3400/api/v1';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'aipo-web';
-const LLM_DEFAULT_MODEL = process.env.LLM_DEFAULT_MODEL || 'gpt-4o';
 const MODEL_CONFIG_KEY = 'aipo:model_config';
 
 interface ModelConfig {
@@ -25,22 +24,64 @@ interface ModelConfig {
 }
 
 /**
- * Redis에서 모델 설정 조회
+ * Dashboard /v1/models API에서 첫 번째 사용 가능한 모델 조회
+ */
+async function fetchFirstAvailableModel(): Promise<string | null> {
+  try {
+    const baseUrl = LLM_PROXY_URL
+      .replace(/\/chat\/completions$/, '')
+      .replace(/\/v1$/, '');
+    const modelsUrl = `${baseUrl}/v1/models`;
+    const response = await fetch(modelsUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Id': LLM_SERVICE_ID,
+      },
+    });
+    if (response.ok) {
+      const data = await response.json() as any;
+      const models = data.data || [];
+      if (models.length > 0) {
+        return models[0].id;
+      }
+    }
+  } catch (e) {
+    console.error('[Agent] Failed to fetch models from proxy:', e);
+  }
+  return null;
+}
+
+/**
+ * Redis에서 모델 설정 조회. 없으면 Dashboard API에서 동적으로 가져옴
  */
 async function getModelConfig(): Promise<ModelConfig> {
   try {
     const configStr = await redis.get(MODEL_CONFIG_KEY);
     if (configStr) {
       const config = JSON.parse(configStr);
-      return {
-        defaultModel: config.defaultModel || LLM_DEFAULT_MODEL,
-        fallbackModels: config.fallbackModels || [],
-      };
+      if (config.defaultModel) {
+        return {
+          defaultModel: config.defaultModel,
+          fallbackModels: config.fallbackModels || [],
+        };
+      }
     }
   } catch (e) {
     console.error('[Agent] Failed to read model config from Redis:', e);
   }
-  return { defaultModel: LLM_DEFAULT_MODEL, fallbackModels: [] };
+
+  // Redis에 설정이 없으면 Dashboard API에서 첫 번째 모델 사용
+  const firstModel = await fetchFirstAvailableModel();
+  if (firstModel) {
+    return { defaultModel: firstModel, fallbackModels: [] };
+  }
+
+  // 최후 수단: 환경변수 (설정 안 되어있으면 에러 발생하게 빈 문자열)
+  const envModel = process.env.LLM_DEFAULT_MODEL || '';
+  if (!envModel) {
+    console.error('[Agent] No model available: Redis empty, API unreachable, LLM_DEFAULT_MODEL not set');
+  }
+  return { defaultModel: envModel, fallbackModels: [] };
 }
 
 // 제한 설정

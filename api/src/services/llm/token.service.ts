@@ -5,21 +5,8 @@
  * OpenAI API 응답의 usage 필드 활용
  */
 
-// 모델별 최대 토큰 설정
-const MODEL_MAX_TOKENS: Record<string, number> = {
-  'gpt-4o': 128000,
-  'gpt-4o-mini': 128000,
-  'gpt-4-turbo': 128000,
-  'gpt-4-turbo-preview': 128000,
-  'gpt-4': 8192,
-  'gpt-3.5-turbo': 16385,
-  'gpt-3.5-turbo-16k': 16385,
-  'claude-3-opus': 200000,
-  'claude-3-sonnet': 200000,
-  'claude-3-haiku': 200000,
-  'claude-3-5-sonnet': 200000,
-  'default': 32000,
-};
+// 기본 최대 토큰 (모델 정보를 가져올 수 없을 때 사용)
+const DEFAULT_MAX_TOKENS = 128000;
 
 export interface AgentSession {
   modelName: string;
@@ -47,21 +34,13 @@ export interface LLMUsage {
 
 /**
  * 모델의 최대 토큰 수 조회
+ * maxTokensOverride가 있으면 우선 사용 (Dashboard API에서 가져온 값)
  */
-export function getMaxTokens(modelName: string): number {
-  // 정확히 일치하는 모델 찾기
-  if (MODEL_MAX_TOKENS[modelName]) {
-    return MODEL_MAX_TOKENS[modelName];
+export function getMaxTokens(_modelName: string, maxTokensOverride?: number): number {
+  if (maxTokensOverride && maxTokensOverride > 0) {
+    return maxTokensOverride;
   }
-
-  // 부분 일치 찾기
-  for (const [key, value] of Object.entries(MODEL_MAX_TOKENS)) {
-    if (modelName.toLowerCase().includes(key.toLowerCase())) {
-      return value;
-    }
-  }
-
-  return MODEL_MAX_TOKENS['default'];
+  return DEFAULT_MAX_TOKENS;
 }
 
 /**
