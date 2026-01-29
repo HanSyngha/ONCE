@@ -410,14 +410,22 @@ const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'aipo-web';
  */
 adminRoutes.get('/models', requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    // Dashboard Proxy의 /v1/models 엔드포인트 호출
-    const proxyBaseUrl = LLM_PROXY_URL.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '');
-    const modelsUrl = `${proxyBaseUrl}/v1/models`;
+    // LLM_PROXY_URL에서 base origin 추출 후 /v1/models 호출
+    // e.g. "http://host:4090/proxy/chat/completions" → "http://host:4090/v1/models"
+    // e.g. "http://localhost:3400/api/v1" → "http://localhost:3400/api/v1/models"
+    const baseUrl = LLM_PROXY_URL
+      .replace(/\/chat\/completions$/, '')
+      .replace(/\/proxy$/, '')
+      .replace(/\/v1$/, '');
+    const modelsUrl = `${baseUrl}/v1/models`;
 
     const response = await fetch(modelsUrl, {
       headers: {
         'Content-Type': 'application/json',
         'X-Service-Id': LLM_SERVICE_ID,
+        'X-User-Id': encodeURIComponent(req.user!.loginid),
+        'X-User-Name': encodeURIComponent(req.user!.username || ''),
+        'X-User-Dept': encodeURIComponent(req.user!.deptname || ''),
       },
     });
 
