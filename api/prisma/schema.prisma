@@ -298,6 +298,7 @@ enum AuditAction {
   REFACTOR_STRUCTURE
   EXPORT_NOTE
   SHARE_LINK
+  UPDATE_MODEL_CONFIG
 }
 
 // ==================== 사용자 설정 ====================
