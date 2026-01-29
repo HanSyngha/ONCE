@@ -28,6 +28,7 @@ const translations = {
     feature3: '팀 협업',
     feature3Desc: '팀 공간에서 함께 공유',
     copyright: '© 2026 ONCE. Developed by syngha.han',
+    tagline: 'Organized Notes Categorized Effortlessly',
   },
   en: {
     title: 'ONCE',
@@ -43,6 +44,7 @@ const translations = {
     feature3: 'Team Collaboration',
     feature3Desc: 'Share in team spaces',
     copyright: '© 2026 ONCE. Developed by syngha.han',
+    tagline: 'Organized Notes Categorized Effortlessly',
   },
   cn: {
     title: 'ONCE',
@@ -58,6 +60,7 @@ const translations = {
     feature3: '团队协作',
     feature3Desc: '在团队空间中共享',
     copyright: '© 2026 ONCE. Developed by syngha.han',
+    tagline: 'Organized Notes Categorized Effortlessly',
   },
 };
 
@@ -365,6 +368,7 @@ export default function Login() {
 
       {/* Footer */}
       <footer className="py-6 text-center">
+        <p className="text-xs text-content-quaternary/60 mb-1">{t.tagline}</p>
         <p className="text-sm text-content-quaternary">{t.copyright}</p>
       </footer>
     </div>
