@@ -25,10 +25,10 @@ interface ModelConfig {
 
 /**
  * Dashboard /v1/models API에서 첫 번째 사용 가능한 모델 조회
- * user 정보가 있으면 사업부 필터링된 모델 목록을 받음
+ * 사업부 필터링을 위해 user 정보 필수
  */
 async function fetchFirstAvailableModel(
-  user?: { loginid: string; username: string; deptname: string }
+  user: { loginid: string; username: string; deptname: string }
 ): Promise<string | null> {
   try {
     const baseUrl = LLM_PROXY_URL
@@ -36,17 +36,15 @@ async function fetchFirstAvailableModel(
       .replace(/\/v1$/, '');
     const modelsUrl = `${baseUrl}/v1/models`;
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Service-Id': LLM_SERVICE_ID,
-    };
-    if (user) {
-      headers['X-User-Id'] = user.loginid;
-      headers['X-User-Name'] = encodeURIComponent(user.username);
-      headers['X-User-Dept'] = encodeURIComponent(user.deptname);
-    }
-
-    const response = await fetch(modelsUrl, { headers });
+    const response = await fetch(modelsUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Id': LLM_SERVICE_ID,
+        'X-User-Id': user.loginid,
+        'X-User-Name': encodeURIComponent(user.username),
+        'X-User-Dept': encodeURIComponent(user.deptname),
+      },
+    });
     if (response.ok) {
       const data = await response.json() as any;
       const models = data.data || [];
@@ -62,10 +60,10 @@ async function fetchFirstAvailableModel(
 
 /**
  * Redis에서 모델 설정 조회. 없으면 Dashboard API에서 동적으로 가져옴
- * user 정보가 있으면 사업부 필터링된 모델 목록에서 선택
+ * 사업부 필터링을 위해 user 정보 필수
  */
 async function getModelConfig(
-  user?: { loginid: string; username: string; deptname: string }
+  user: { loginid: string; username: string; deptname: string }
 ): Promise<ModelConfig> {
   try {
     const configStr = await redis.get(MODEL_CONFIG_KEY);
