@@ -27,7 +27,7 @@ const translations = {
     feature2Desc: '한국어, 영어, 중국어 자동 번역',
     feature3: '팀 협업',
     feature3Desc: '팀 공간에서 함께 공유',
-    copyright: '© 2024 AIPO. All rights reserved.',
+    copyright: '© 2026 AIPO for Web. Developed by syngha.han',
   },
   en: {
     title: 'AIPO',
@@ -42,7 +42,7 @@ const translations = {
     feature2Desc: 'Korean, English, Chinese translation',
     feature3: 'Team Collaboration',
     feature3Desc: 'Share in team spaces',
-    copyright: '© 2024 AIPO. All rights reserved.',
+    copyright: '© 2026 AIPO for Web. Developed by syngha.han',
   },
   cn: {
     title: 'AIPO',
