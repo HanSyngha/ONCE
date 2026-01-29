@@ -20,7 +20,7 @@ import {
 const translations = {
   ko: {
     title: '검색',
-    placeholder: 'AI로 노트 검색...',
+    placeholder: '무엇이든 찾아 드립니다...',
     searching: '검색 중...',
     results: '검색 결과',
     noResults: '검색 결과가 없습니다',
@@ -35,7 +35,7 @@ const translations = {
   },
   en: {
     title: 'Search',
-    placeholder: 'Search notes with AI...',
+    placeholder: 'We\'ll find anything for you...',
     searching: 'Searching...',
     results: 'Search Results',
     noResults: 'No results found',
@@ -50,7 +50,7 @@ const translations = {
   },
   cn: {
     title: '搜索',
-    placeholder: 'AI 搜索笔记...',
+    placeholder: '什么都能帮您找到...',
     searching: '搜索中...',
     results: '搜索结果',
     noResults: '未找到结果',

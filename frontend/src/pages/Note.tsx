@@ -341,16 +341,7 @@ export default function Note() {
                       <ArrowDownTrayIcon className="w-4 h-4" />
                       {t.export}
                     </button>
-                    <button
-                      onClick={() => {
-                        navigate(`/note/${fileId}/history`);
-                        setShowMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-content-secondary hover:bg-surface-secondary transition-colors"
-                    >
-                      <ClockIcon className="w-4 h-4" />
-                      {t.history}
-                    </button>
+                    {/* TODO: History page not yet implemented */}
                   </div>
 
                   {/* Retry translation */}

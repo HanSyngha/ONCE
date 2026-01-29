@@ -5,7 +5,7 @@
  */
 
 import { Router } from 'express';
-import { prisma } from '../index.js';
+import { prisma, redis } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUserId, requireSuperAdmin, requireTeamAdminOrHigher, isSuperAdmin } from '../middleware/auth.js';
 
 export const adminRoutes = Router();
@@ -34,6 +34,13 @@ adminRoutes.get('/teams', requireTeamAdminOrHigher, async (req: AuthenticatedReq
             admins: true,
           },
         },
+        admins: {
+          include: {
+            user: {
+              select: { id: true, loginid: true, username: true },
+            },
+          },
+        },
         space: {
           include: {
             _count: {
@@ -56,6 +63,7 @@ adminRoutes.get('/teams', requireTeamAdminOrHigher, async (req: AuthenticatedReq
         businessUnit: team.businessUnit,
         memberCount: team._count.members,
         adminCount: team._count.admins,
+        admins: team.admins.map(a => a.user),
         spaceId: team.space?.id,
         fileCount: team.space?._count.files || 0,
         folderCount: team.space?._count.folders || 0,
@@ -387,5 +395,110 @@ adminRoutes.get('/users', requireSuperAdmin, async (req: AuthenticatedRequest, r
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// ==================== Model Management ====================
+
+const MODEL_CONFIG_KEY = 'aipo:model_config';
+const LLM_PROXY_URL = process.env.LLM_PROXY_URL || 'http://localhost:3400/api/v1';
+const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'aipo-web';
+
+/**
+ * GET /admin/models
+ * Dashboard LLM Proxy에서 사용 가능한 모델 목록 조회
+ */
+adminRoutes.get('/models', requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    // Dashboard Proxy의 /v1/models 엔드포인트 호출
+    const proxyBaseUrl = LLM_PROXY_URL.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '');
+    const modelsUrl = `${proxyBaseUrl}/v1/models`;
+
+    const response = await fetch(modelsUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Id': LLM_SERVICE_ID,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to fetch models from proxy:', response.status, errorText);
+      res.status(502).json({ error: 'Failed to fetch models from LLM proxy' });
+      return;
+    }
+
+    const data = await response.json() as any;
+    const models = (data.data || []).map((m: any) => ({
+      id: m.id,
+      displayName: m._nexus?.displayName || m.id,
+      maxTokens: m._nexus?.maxTokens || 128000,
+    }));
+
+    res.json({ models });
+  } catch (error) {
+    console.error('Get models error:', error);
+    res.status(500).json({ error: 'Failed to get models' });
+  }
+});
+
+/**
+ * GET /admin/model-config
+ * 현재 모델 설정 조회 (default model + fallback models)
+ */
+adminRoutes.get('/model-config', requireTeamAdminOrHigher, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const configStr = await redis.get(MODEL_CONFIG_KEY);
+    if (!configStr) {
+      res.json({
+        defaultModel: process.env.LLM_DEFAULT_MODEL || 'gpt-4o',
+        fallbackModels: [],
+      });
+      return;
+    }
+
+    res.json(JSON.parse(configStr));
+  } catch (error) {
+    console.error('Get model config error:', error);
+    res.status(500).json({ error: 'Failed to get model config' });
+  }
+});
+
+/**
+ * PUT /admin/model-config
+ * 모델 설정 변경 (Super Admin 전용)
+ * Body: { defaultModel: string, fallbackModels: string[] }
+ */
+adminRoutes.put('/model-config', requireSuperAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { defaultModel, fallbackModels } = req.body;
+
+    if (!defaultModel) {
+      res.status(400).json({ error: 'defaultModel is required' });
+      return;
+    }
+
+    const config = {
+      defaultModel,
+      fallbackModels: fallbackModels || [],
+      updatedBy: req.user!.loginid,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await redis.set(MODEL_CONFIG_KEY, JSON.stringify(config));
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'UPDATE_MODEL_CONFIG',
+        userId: req.userId!,
+        details: JSON.stringify(config),
+      },
+    });
+
+    res.json({ success: true, config });
+  } catch (error) {
+    console.error('Update model config error:', error);
+    res.status(500).json({ error: 'Failed to update model config' });
   }
 });

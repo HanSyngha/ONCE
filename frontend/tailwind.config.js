@@ -22,7 +22,7 @@ export default {
           900: '#1e3a8a',
           950: '#172554',
         },
-        // Accent colors
+        // Accent colors (purple gradient)
         accent: {
           50: '#fdf4ff',
           100: '#fae8ff',
@@ -34,27 +34,28 @@ export default {
           700: '#a21caf',
           800: '#86198f',
           900: '#701a75',
+          purple: '#a855f7',
         },
-        // Surface colors for cards and backgrounds
+        // Semantic surface colors (light/dark aware via CSS vars)
         surface: {
-          light: '#ffffff',
-          'light-hover': '#f8fafc',
-          'light-active': '#f1f5f9',
-          dark: '#1e293b',
-          'dark-hover': '#334155',
-          'dark-active': '#475569',
+          primary: 'var(--surface-primary)',
+          secondary: 'var(--surface-secondary)',
+          tertiary: 'var(--surface-tertiary)',
         },
-        // Text colors
+        // Semantic text/content colors
         content: {
-          primary: '#0f172a',
-          secondary: '#475569',
-          tertiary: '#94a3b8',
+          primary: 'var(--content-primary)',
+          secondary: 'var(--content-secondary)',
+          tertiary: 'var(--content-tertiary)',
+          quaternary: 'var(--content-quaternary)',
           'primary-dark': '#f8fafc',
           'secondary-dark': '#cbd5e1',
           'tertiary-dark': '#64748b',
         },
-        // Border colors
+        // Semantic border colors
         border: {
+          primary: 'var(--border-primary)',
+          secondary: 'var(--border-secondary)',
           light: '#e2e8f0',
           'light-hover': '#cbd5e1',
           dark: '#334155',
@@ -104,8 +105,11 @@ export default {
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
+        'fadeIn': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
+        'slideUp': 'slideUp 0.3s ease-out',
         'slide-down': 'slideDown 0.3s ease-out',
+        'slideDown': 'slideDown 0.3s ease-out',
         'slide-left': 'slideLeft 0.3s ease-out',
         'slide-right': 'slideRight 0.3s ease-out',
         'scale-in': 'scaleIn 0.2s ease-out',

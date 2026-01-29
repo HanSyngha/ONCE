@@ -138,6 +138,14 @@ export const adminApi = {
 
   getUsers: (params?: { page?: number; limit?: number; search?: string }) =>
     api.get('/admin/users', { params }),
+
+  // Model management
+  getModels: () => api.get('/admin/models'),
+
+  getModelConfig: () => api.get('/admin/model-config'),
+
+  updateModelConfig: (config: { defaultModel: string; fallbackModels: string[] }) =>
+    api.put('/admin/model-config', config),
 };
 
 // ==================== Settings API ====================

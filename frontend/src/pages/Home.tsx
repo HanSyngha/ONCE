@@ -12,9 +12,6 @@ import {
   DocumentTextIcon,
   ClockIcon,
   ArrowTrendingUpIcon,
-  UserGroupIcon,
-  PlusIcon,
-  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 
 const translations = {
@@ -150,30 +147,24 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Greeting */}
-      <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold text-content-primary mb-2">
-          {t.greeting}, {user?.username}!
-        </h1>
-        <p className="text-content-secondary">{t.welcome}</p>
-      </div>
-
-      {/* Quick Start Card */}
+      {/* Greeting + Quick Start */}
       <div
         onClick={() => setShowInputModal(true)}
-        className="card p-6 mb-8 cursor-pointer group hover:border-primary-300 dark:hover:border-primary-700 transition-all duration-300"
+        className="mb-8 p-6 rounded-2xl bg-gradient-to-br from-primary-600 via-primary-500 to-accent-purple cursor-pointer group hover:shadow-glow transition-all duration-300"
       >
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-purple flex items-center justify-center group-hover:scale-105 transition-transform shadow-glow">
-            <SparklesIcon className="w-7 h-7 text-white" />
-          </div>
+        <div className="flex items-center gap-5">
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-content-primary group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-              {t.newNote}
-            </h2>
-            <p className="text-sm text-content-tertiary">{t.newNoteDesc}</p>
+            <p className="text-primary-100 text-sm font-medium mb-1">
+              {t.greeting}, {user?.username}
+            </p>
+            <h1 className="text-xl lg:text-2xl font-bold text-white mb-1">
+              {t.welcome}
+            </h1>
+            <p className="text-primary-200 text-sm">{t.newNoteDesc}</p>
           </div>
-          <ArrowRightIcon className="w-5 h-5 text-content-quaternary group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
+          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center group-hover:scale-110 transition-transform">
+            <SparklesIcon className="w-6 h-6 text-white" />
+          </div>
         </div>
       </div>
 
@@ -274,14 +265,7 @@ export default function Home() {
               <DocumentTextIcon className="w-8 h-8 text-content-quaternary" />
             </div>
             <p className="text-content-secondary font-medium mb-1">{t.empty}</p>
-            <p className="text-content-tertiary text-sm mb-4">{t.emptyDesc}</p>
-            <button
-              onClick={() => setShowInputModal(true)}
-              className="btn-primary text-sm"
-            >
-              <PlusIcon className="w-4 h-4" />
-              {t.newNote}
-            </button>
+            <p className="text-content-tertiary text-sm">{t.emptyDesc}</p>
           </div>
         )}
       </div>

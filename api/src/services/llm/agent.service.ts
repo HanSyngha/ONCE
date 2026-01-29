@@ -7,7 +7,7 @@
  * - 토큰 관리 (80% 임계치)
  */
 
-import { prisma, io } from '../../index.js';
+import { prisma, io, redis } from '../../index.js';
 import { executeTool, getToolDefinitions, ToolResult } from './tools.service.js';
 import { updateTokenUsage, getTokenWarning, TokenUsageStatus, createAgentSession } from './token.service.js';
 import { emitRequestProgress } from '../../websocket/server.js';
@@ -17,6 +17,31 @@ import { sendFailureEmail } from '../mail.service.js';
 const LLM_PROXY_URL = process.env.LLM_PROXY_URL || 'http://localhost:3400/api/v1';
 const LLM_SERVICE_ID = process.env.LLM_SERVICE_ID || 'aipo-web';
 const LLM_DEFAULT_MODEL = process.env.LLM_DEFAULT_MODEL || 'gpt-4o';
+const MODEL_CONFIG_KEY = 'aipo:model_config';
+
+interface ModelConfig {
+  defaultModel: string;
+  fallbackModels: string[];
+}
+
+/**
+ * Redis에서 모델 설정 조회
+ */
+async function getModelConfig(): Promise<ModelConfig> {
+  try {
+    const configStr = await redis.get(MODEL_CONFIG_KEY);
+    if (configStr) {
+      const config = JSON.parse(configStr);
+      return {
+        defaultModel: config.defaultModel || LLM_DEFAULT_MODEL,
+        fallbackModels: config.fallbackModels || [],
+      };
+    }
+  } catch (e) {
+    console.error('[Agent] Failed to read model config from Redis:', e);
+  }
+  return { defaultModel: LLM_DEFAULT_MODEL, fallbackModels: [] };
+}
 
 // 제한 설정
 const MAX_ITERATIONS = 100;
@@ -155,11 +180,12 @@ ${treeStructure || '(빈 공간)'}
 }
 
 /**
- * LLM API 호출
+ * LLM API 호출 (단일 모델)
  */
-async function callLLM(
+async function callLLMWithModel(
   messages: LLMMessage[],
-  user: { loginid: string; username: string; deptname: string }
+  user: { loginid: string; username: string; deptname: string },
+  model: string
 ): Promise<LLMResponse> {
   const response = await fetch(`${LLM_PROXY_URL}/chat/completions`, {
     method: 'POST',
@@ -171,7 +197,7 @@ async function callLLM(
       'X-Service-Id': LLM_SERVICE_ID,
     },
     body: JSON.stringify({
-      model: LLM_DEFAULT_MODEL,
+      model,
       messages,
       tools: getToolDefinitions(),
       tool_choice: 'auto',
@@ -180,10 +206,37 @@ async function callLLM(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`LLM API error: ${response.status} - ${error}`);
+    throw new Error(`LLM API error (model: ${model}): ${response.status} - ${error}`);
   }
 
   return response.json() as Promise<LLMResponse>;
+}
+
+/**
+ * LLM API 호출 (default → fallback 순서로 시도)
+ */
+async function callLLM(
+  messages: LLMMessage[],
+  user: { loginid: string; username: string; deptname: string }
+): Promise<LLMResponse> {
+  const config = await getModelConfig();
+  const modelsToTry = [config.defaultModel, ...config.fallbackModels];
+
+  let lastError: Error | null = null;
+
+  for (const model of modelsToTry) {
+    try {
+      console.log(`[Agent] Trying model: ${model}`);
+      const response = await callLLMWithModel(messages, user, model);
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`[Agent] Model ${model} failed:`, (error as Error).message);
+      // 다음 fallback 모델 시도
+    }
+  }
+
+  throw lastError || new Error('All models failed');
 }
 
 /**
@@ -208,8 +261,9 @@ export async function runAgentLoop(
   // 공간 트리 구조 조회
   const treeStructure = await getTreeStructure(spaceId);
 
-  // 세션 초기화
-  const session = createAgentSession(LLM_DEFAULT_MODEL);
+  // 세션 초기화 (Redis에서 설정된 모델 사용)
+  const modelConfig = await getModelConfig();
+  const session = createAgentSession(modelConfig.defaultModel);
 
   // 초기 메시지
   const messages: LLMMessage[] = [

@@ -31,7 +31,7 @@ const themeLabels: Record<Theme, Record<Language, string>> = {
 const translations = {
   ko: {
     search: '검색',
-    searchPlaceholder: '노트 검색...',
+    searchPlaceholder: '무엇이든 찾아 드립니다...',
     profile: '프로필',
     settings: '설정',
     logout: '로그아웃',
@@ -39,7 +39,7 @@ const translations = {
   },
   en: {
     search: 'Search',
-    searchPlaceholder: 'Search notes...',
+    searchPlaceholder: 'We\'ll find anything for you...',
     profile: 'Profile',
     settings: 'Settings',
     logout: 'Logout',
@@ -47,7 +47,7 @@ const translations = {
   },
   cn: {
     search: '搜索',
-    searchPlaceholder: '搜索笔记...',
+    searchPlaceholder: '什么都能帮您找到...',
     profile: '个人资料',
     settings: '设置',
     logout: '退出',
@@ -86,6 +86,22 @@ export default function Header() {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Global keyboard shortcut: Cmd/Ctrl + K to open search
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        setShowSearch(true);
+      }
+      if (event.key === 'Escape') {
+        setShowSearch(false);
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {

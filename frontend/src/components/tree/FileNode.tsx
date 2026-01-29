@@ -16,10 +16,28 @@ interface FileNodeProps {
   level: number;
 }
 
-const languageLabels = {
-  ko: { KO: '한국어', EN: '영어', CN: '중국어' },
-  en: { KO: 'Korean', EN: 'English', CN: 'Chinese' },
-  cn: { KO: '韩语', EN: '英语', CN: '中文' },
+const translations = {
+  ko: {
+    share: '링크 공유',
+    export: 'Markdown 내보내기',
+    delete: '휴지통으로 이동',
+    languages: '사용 가능한 언어',
+    KO: '한국어', EN: '영어', CN: '중국어',
+  },
+  en: {
+    share: 'Share link',
+    export: 'Export as Markdown',
+    delete: 'Move to trash',
+    languages: 'Available Languages',
+    KO: 'Korean', EN: 'English', CN: 'Chinese',
+  },
+  cn: {
+    share: '分享链接',
+    export: '导出为 Markdown',
+    delete: '移至回收站',
+    languages: '可用语言',
+    KO: '韩语', EN: '英语', CN: '中文',
+  },
 };
 
 function FileNode({ node, level }: FileNodeProps) {
@@ -27,6 +45,7 @@ function FileNode({ node, level }: FileNodeProps) {
   const { fileId } = useParams();
   const { setSelectedFileId } = useSpaceStore();
   const { language } = useSettingsStore();
+  const t = translations[language];
   const [showMenu, setShowMenu] = useState(false);
 
   const paddingLeft = 12 + level * 16 + 14; // Extra padding for alignment
@@ -127,7 +146,7 @@ function FileNode({ node, level }: FileNodeProps) {
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-content-secondary hover:bg-surface-secondary transition-colors"
               >
                 <ShareIcon className="w-4 h-4" />
-                Share link
+                {t.share}
               </button>
               <button
                 onClick={() => {
@@ -137,7 +156,7 @@ function FileNode({ node, level }: FileNodeProps) {
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-content-secondary hover:bg-surface-secondary transition-colors"
               >
                 <ArrowDownTrayIcon className="w-4 h-4" />
-                Export as Markdown
+                {t.export}
               </button>
             </div>
 
@@ -145,7 +164,7 @@ function FileNode({ node, level }: FileNodeProps) {
             {availableLanguages.length > 0 && (
               <div className="py-1 border-t border-border-primary">
                 <div className="px-4 py-1.5 text-xs font-medium text-content-quaternary uppercase tracking-wider">
-                  Available Languages
+                  {t.languages}
                 </div>
                 {availableLanguages.map((lang) => (
                   <button
@@ -154,7 +173,7 @@ function FileNode({ node, level }: FileNodeProps) {
                     className="w-full flex items-center gap-3 px-4 py-2 text-sm text-content-secondary hover:bg-surface-secondary transition-colors"
                   >
                     <LanguageIcon className="w-4 h-4" />
-                    {languageLabels[language][lang as 'KO' | 'EN' | 'CN']}
+                    {t[lang as 'KO' | 'EN' | 'CN']}
                   </button>
                 ))}
               </div>
@@ -169,7 +188,7 @@ function FileNode({ node, level }: FileNodeProps) {
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               >
                 <TrashIcon className="w-4 h-4" />
-                Move to trash
+                {t.delete}
               </button>
             </div>
           </div>

@@ -29,6 +29,7 @@ const translations = {
     emailNotifications: '이메일 알림',
     emailNotificationsDesc: '히스토리 만료 알림을 이메일로 받습니다',
     saved: '설정이 저장되었습니다',
+    save: '저장',
     light: '라이트',
     dark: '다크',
     system: '시스템',
@@ -51,6 +52,7 @@ const translations = {
     emailNotifications: 'Email Notifications',
     emailNotificationsDesc: 'Receive history expiration alerts via email',
     saved: 'Settings saved',
+    save: 'Save',
     light: 'Light',
     dark: 'Dark',
     system: 'System',
@@ -73,6 +75,7 @@ const translations = {
     emailNotifications: '邮件通知',
     emailNotificationsDesc: '通过邮件接收历史过期提醒',
     saved: '设置已保存',
+    save: '保存',
     light: '浅色',
     dark: '深色',
     system: '系统',
@@ -308,6 +311,22 @@ export default function Settings() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="btn-primary"
+          >
+            {isSaving ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <CheckIcon className="w-4 h-4" />
+            )}
+            {t.save}
+          </button>
         </div>
       </div>
     </div>
