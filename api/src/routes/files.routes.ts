@@ -322,7 +322,7 @@ filesRoutes.post('/:id/share', async (req: AuthenticatedRequest, res) => {
 
     // 공유 링크 URL 생성
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:16001';
-    const shareUrl = `${baseUrl}/notes/${file.id}`;
+    const shareUrl = `${baseUrl}/note/${file.id}`;
 
     // 감사 로그
     await prisma.auditLog.create({

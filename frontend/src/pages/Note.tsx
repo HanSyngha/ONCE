@@ -156,6 +156,7 @@ export default function Note() {
       showToast.success(t.shareSuccess);
     } catch (err) {
       console.error('Share failed:', err);
+      showToast.error('공유 링크 생성에 실패했습니다');
     }
   };
 
@@ -171,7 +172,8 @@ export default function Note() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${note?.name || 'note'}.md`;
+      const fileName = note?.name || 'note';
+      a.download = fileName.endsWith('.md') ? fileName : `${fileName}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
