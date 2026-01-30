@@ -722,3 +722,305 @@ quickAddRoutes.post('/todo', async (req, res) => {
     res.status(500).json({ error: 'Failed to create todo' });
   }
 });
+
+/**
+ * @swagger
+ * /quick-add/search:
+ *   get:
+ *     summary: 검색 (개인 공간)
+ *     description: |
+ *       loginid로 사용자를 식별하여 개인 공간에서 AI 검색합니다.
+ *       기존 검색 agent(SEARCH)와 동일한 로직을 사용합니다.
+ *     tags: [Quick Add]
+ *     parameters:
+ *       - in: query
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 사용자 loginid
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 검색어 (자연어)
+ *     responses:
+ *       200:
+ *         description: 검색 결과 (관련도순)
+ *       400:
+ *         description: 잘못된 요청
+ *       404:
+ *         description: 사용자를 찾을 수 없음
+ */
+quickAddRoutes.get('/search', async (req, res) => {
+  try {
+    const { id, q } = req.query;
+
+    if (!id || !q) {
+      res.status(400).json({ error: 'id and q are required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { loginid: id as string },
+      include: {
+        personalSpace: { select: { id: true } },
+      },
+    });
+
+    if (!user || !user.personalSpace) {
+      res.status(404).json({ error: 'User or personal space not found' });
+      return;
+    }
+
+    const spaceId = user.personalSpace.id;
+
+    // 요청 생성
+    const request = await prisma.request.create({
+      data: {
+        userId: user.id,
+        spaceId,
+        type: 'SEARCH',
+        input: q as string,
+        status: 'PENDING',
+      },
+    });
+
+    // 큐에 추가
+    const position = await addToQueue(request.id, spaceId, 'SEARCH');
+
+    // WebSocket으로 큐 상태 전송
+    io.to(`user:${user.id}`).emit('queue:update', {
+      requestId: request.id,
+      position,
+      status: 'waiting',
+    });
+
+    res.json({
+      request: {
+        id: request.id,
+        status: 'PENDING',
+        position,
+      },
+      message: '검색 요청이 접수되었습니다. 결과는 비동기로 처리됩니다.',
+    });
+  } catch (error) {
+    console.error('Quick search error:', error);
+    res.status(500).json({ error: 'Failed to process search request' });
+  }
+});
+
+/**
+ * @swagger
+ * /quick-add/todos:
+ *   get:
+ *     summary: Todo 목록 조회 (개인 공간)
+ *     description: |
+ *       loginid로 사용자를 식별하여 개인 공간의 Todo를 조회합니다.
+ *     tags: [Quick Add]
+ *     parameters:
+ *       - in: query
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 사용자 loginid
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *         description: 조회 시작일 (YYYY-MM-DD, 기본 오늘)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *         description: 조회 종료일 (YYYY-MM-DD, 기본 1년 후)
+ *     responses:
+ *       200:
+ *         description: Todo 목록
+ */
+quickAddRoutes.get('/todos', async (req, res) => {
+  try {
+    const { id, startDate, endDate } = req.query;
+
+    if (!id) {
+      res.status(400).json({ error: 'id is required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { loginid: id as string },
+      include: {
+        personalSpace: { select: { id: true } },
+      },
+    });
+
+    if (!user || !user.personalSpace) {
+      res.status(404).json({ error: 'User or personal space not found' });
+      return;
+    }
+
+    const now = new Date();
+    const oneYearLater = new Date();
+    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+
+    const start = startDate ? new Date(startDate as string) : now;
+    const end = endDate ? new Date(endDate as string) : oneYearLater;
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+      return;
+    }
+
+    const todos = await prisma.todo.findMany({
+      where: {
+        userId: user.id,
+        spaceId: user.personalSpace.id,
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      orderBy: [
+        { completed: 'asc' },
+        { startDate: 'asc' },
+      ],
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        startDate: true,
+        endDate: true,
+        completed: true,
+        completedAt: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({
+      todos,
+      range: {
+        start: start.toISOString(),
+        end: end.toISOString(),
+      },
+      total: todos.length,
+    });
+  } catch (error) {
+    console.error('Quick todos list error:', error);
+    res.status(500).json({ error: 'Failed to get todos' });
+  }
+});
+
+/**
+ * @swagger
+ * /quick-add/todos:
+ *   patch:
+ *     summary: Todo 수정 (개인 공간)
+ *     description: |
+ *       loginid로 사용자를 식별하여 Todo를 수정합니다.
+ *     tags: [Quick Add]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *               - todoId
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 description: 사용자 loginid
+ *               todoId:
+ *                 type: string
+ *                 description: Todo ID
+ *               completed:
+ *                 type: boolean
+ *               title:
+ *                 type: string
+ *               content:
+ *                 type: string
+ *               startDate:
+ *                 type: string
+ *               endDate:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 수정된 Todo
+ */
+quickAddRoutes.patch('/todos', async (req, res) => {
+  try {
+    const { id, todoId, completed, title, content, startDate, endDate } = req.body;
+
+    if (!id || !todoId) {
+      res.status(400).json({ error: 'id and todoId are required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { loginid: id as string },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const todo = await prisma.todo.findUnique({ where: { id: todoId } });
+
+    if (!todo) {
+      res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+
+    if (todo.userId !== user.id) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const updateData: Record<string, any> = {};
+
+    if (typeof completed === 'boolean') {
+      updateData.completed = completed;
+      updateData.completedAt = completed ? new Date() : null;
+    }
+    if (typeof title === 'string' && title.trim()) {
+      updateData.title = title.trim();
+    }
+    if (typeof content === 'string') {
+      updateData.content = content;
+    }
+    if (startDate) {
+      updateData.startDate = new Date(startDate);
+    }
+    if (endDate) {
+      updateData.endDate = new Date(endDate);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: 'No valid fields to update' });
+      return;
+    }
+
+    const updated = await prisma.todo.update({
+      where: { id: todoId },
+      data: updateData,
+    });
+
+    res.json({
+      todo: {
+        id: updated.id,
+        title: updated.title,
+        content: updated.content,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+        completed: updated.completed,
+        completedAt: updated.completedAt,
+      },
+      message: 'Todo가 수정되었습니다.',
+    });
+  } catch (error) {
+    console.error('Quick update todo error:', error);
+    res.status(500).json({ error: 'Failed to update todo' });
+  }
+});
