@@ -244,6 +244,7 @@ ${isPersonalSpace ? '\n### 개인 공간 폴더 깊이 제한\n이 공간은 **�
 - complete(summary): 작업 완료 선언
 
 ## 필수 규칙 (절대 위반 금지)
+- **매 응답에서 반드시 도구를 호출하세요.** 텍스트만 응답하면 안 됩니다. 항상 도구(tool) 중 하나를 호출해야 합니다. 할 일이 끝났으면 complete()를 호출하세요.
 - **한 번에 하나의 도구만 호출하세요.** 여러 도구를 동시에 호출하지 마세요.
 - **기존 파일 수정(edit_file)을 새 파일 생성(add_file)보다 항상 우선하세요.** 같은 주제/카테고리의 파일이 이미 있으면 반드시 edit_file로 내용을 추가하세요. 중복 파일 생성은 금지합니다.
 - 폴더만 만들고 끝내면 안 됩니다. 반드시 최소 1개 이상의 파일을 add_file로 생성하거나 edit_file로 수정해야 합니다.
@@ -672,9 +673,28 @@ export async function runAgentLoop(
         // 성공 시 retry 카운트 리셋
         retryCount = 0;
       } else {
-        // tool_choice=required인데 tool call 없이 응답 → 에러로 간주하여 retry
-        console.warn(`[Agent] LLM returned no tool call (tool_choice=required), treating as error`);
-        throw new Error('LLM returned no tool call with tool_choice=required');
+        // tool_choice=required인데 tool call 없이 응답 → 재촉 메시지로 재시도
+        console.warn(`[Agent] LLM returned no tool call (tool_choice=required), nudging to use tools`);
+
+        // assistant가 텍스트만 보낸 경우, 재촉 user 메시지를 추가하여 다음 iteration에서 도구 호출 유도
+        messages.push({
+          role: 'user',
+          content: '도구를 반드시 호출하세요. 텍스트로만 응답하면 안 됩니다. 할 일이 남아있으면 적절한 도구를 호출하고, 모든 작업이 끝났으면 complete()를 호출하세요.',
+        });
+
+        retryCount++;
+        console.warn(`[Agent] No tool call retry ${retryCount}/3`);
+        if (retryCount >= 3) {
+          // 이미 작업한 결과가 있으면 partial result 반환
+          const hasWork = result.filesCreated.length > 0 || result.filesModified.length > 0 || result.foldersCreated.length > 0;
+          if (hasWork) {
+            console.log(`[Agent] No tool call max retries but returning partial result`);
+            result.summary = result.summary || '작업 결과가 저장되었습니다.';
+            return result;
+          }
+          throw new Error('LLM returned no tool call with tool_choice=required');
+        }
+        continue;
       }
 
     } catch (error) {
