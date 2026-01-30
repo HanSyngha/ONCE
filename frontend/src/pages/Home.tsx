@@ -164,7 +164,7 @@ export default function Home() {
               {t.welcome}
             </h1>
             <p className="text-white/80 text-sm font-medium mb-1">{t.catchphrase}</p>
-            <p className="text-primary-200/60 text-xs tracking-wide">Organized Notes Categorized Effortlessly</p>
+            <p className="text-primary-200/60 text-xs tracking-wide">AI powered 노트 · 지식 · 할일관리</p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center group-hover:scale-110 transition-transform">
             <SparklesIcon className="w-6 h-6 text-white" />

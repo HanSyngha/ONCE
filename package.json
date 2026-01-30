@@ -1,7 +1,7 @@
 {
   "name": "once",
   "version": "1.0.0",
-  "description": "ONCE (Organized Notes Categorized Effortlessly) - AI-powered knowledge sharing service",
+  "description": "ONCE - 한번만 입력하세요, 알아서 정리해 드릴게요. AI powered 노트 · 지식 · 할일관리",
   "private": true,
   "workspaces": [
     "api",
