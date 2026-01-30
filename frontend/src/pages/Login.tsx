@@ -29,6 +29,7 @@ const translations = {
     feature3Desc: '팀 공간에서 함께 공유',
     copyright: '© 2026 ONCE. Developed by syngha.han',
     tagline: 'Organized Notes Categorized Effortlessly',
+    catchphrase: '한번만 입력하면 모든걸 알아서!',
     notice: '개인 프로젝트 | 버그 제보:',
     contact: 'syngha.han',
   },
@@ -47,6 +48,7 @@ const translations = {
     feature3Desc: 'Share in team spaces',
     copyright: '© 2026 ONCE. Developed by syngha.han',
     tagline: 'Organized Notes Categorized Effortlessly',
+    catchphrase: 'Type once, AI handles the rest!',
     notice: 'Personal project | Bug report:',
     contact: 'syngha.han',
   },
@@ -65,6 +67,7 @@ const translations = {
     feature3Desc: '在团队空间中共享',
     copyright: '© 2026 ONCE. Developed by syngha.han',
     tagline: 'Organized Notes Categorized Effortlessly',
+    catchphrase: '输入一次，AI全搞定！',
     notice: '个人项目 | 错误反馈:',
     contact: 'syngha.han',
   },
@@ -245,14 +248,18 @@ export default function Login() {
         <div className="max-w-4xl w-full grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left: Hero content */}
           <div className="text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-xs font-medium mb-6 tracking-wide">
               <SparklesIcon className="w-4 h-4" />
-              AI-Powered
+              {t.tagline}
             </div>
 
-            <h1 className="text-4xl lg:text-5xl font-bold text-content-primary mb-4 leading-tight whitespace-pre-line">
+            <h1 className="text-4xl lg:text-5xl font-bold text-content-primary mb-3 leading-tight whitespace-pre-line">
               {t.subtitle}
             </h1>
+
+            <p className="text-base font-semibold text-primary-500 dark:text-primary-400 mb-5 max-w-lg mx-auto lg:mx-0">
+              {t.catchphrase}
+            </p>
 
             <p className="text-lg text-content-secondary mb-8 max-w-lg mx-auto lg:mx-0">
               {t.description}

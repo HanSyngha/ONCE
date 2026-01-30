@@ -18,6 +18,7 @@ const translations = {
   ko: {
     greeting: '안녕하세요',
     welcome: '무엇을 작성해드릴까요?',
+    catchphrase: '한번만 입력하면 모든걸 알아서!',
     quickStart: '빠른 시작',
     newNote: '새 노트 작성',
     newNoteDesc: 'AI가 자동으로 정리합니다',
@@ -35,6 +36,7 @@ const translations = {
   en: {
     greeting: 'Hello',
     welcome: 'What would you like to write?',
+    catchphrase: 'Type once, AI handles the rest!',
     quickStart: 'Quick Start',
     newNote: 'Create New Note',
     newNoteDesc: 'AI organizes automatically',
@@ -52,6 +54,7 @@ const translations = {
   cn: {
     greeting: '你好',
     welcome: '今天想写点什么？',
+    catchphrase: '输入一次，AI全搞定！',
     quickStart: '快速开始',
     newNote: '创建新笔记',
     newNoteDesc: 'AI 自动整理',
@@ -160,7 +163,8 @@ export default function Home() {
             <h1 className="text-xl lg:text-2xl font-bold text-white mb-1">
               {t.welcome}
             </h1>
-            <p className="text-primary-200 text-sm">{t.newNoteDesc}</p>
+            <p className="text-white/80 text-sm font-medium mb-1">{t.catchphrase}</p>
+            <p className="text-primary-200/60 text-xs tracking-wide">Organized Notes Categorized Effortlessly</p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center group-hover:scale-110 transition-transform">
             <SparklesIcon className="w-6 h-6 text-white" />
