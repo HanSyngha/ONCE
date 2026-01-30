@@ -568,6 +568,11 @@ async function updateChildPaths(spaceId: string, oldPath: string, newPath: strin
  * 파일 생성
  */
 async function addFile(spaceId: string, path: string, content: string, loginid: string): Promise<ToolResult> {
+  // 빈 content 방어
+  if (!content || content.trim() === '' || content.trim() === '[]') {
+    return { success: false, message: 'Content cannot be empty. Please provide valid BlockNote JSON content with actual text.', error: 'EMPTY_CONTENT' };
+  }
+
   const normalizedPath = normalizePath(path);
   const { folderPath, fileName } = parseFilePath(normalizedPath);
 

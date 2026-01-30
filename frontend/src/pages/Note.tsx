@@ -114,7 +114,30 @@ export default function Note() {
 
     try {
       const response = await filesApi.get(fileId, noteLanguage);
-      setNote(response.data);
+      const { file, version, availableLanguages } = response.data;
+
+      // version.content는 문자열일 수 있으므로 JSON 파싱
+      let parsedContent = version?.content;
+      if (typeof parsedContent === 'string') {
+        try {
+          parsedContent = JSON.parse(parsedContent);
+        } catch {
+          // 파싱 실패 시 원본 유지
+        }
+      }
+
+      setNote({
+        id: file.id,
+        name: file.name,
+        path: file.path,
+        content: parsedContent,
+        createdBy: file.createdBy,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
+        hasKO: availableLanguages.some((l: any) => l.language === 'KO'),
+        hasEN: availableLanguages.some((l: any) => l.language === 'EN'),
+        hasCN: availableLanguages.some((l: any) => l.language === 'CN'),
+      });
     } catch (err: any) {
       setError(err.response?.data?.error || t.error);
       console.error('Failed to load note:', err);

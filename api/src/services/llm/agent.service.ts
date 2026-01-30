@@ -506,8 +506,16 @@ export async function runAgentLoop(
 
           try {
             toolArgs = JSON.parse(toolCall.function.arguments);
-          } catch {
-            toolArgs = {};
+          } catch (parseErr) {
+            console.error(`[Agent] Failed to parse tool arguments for ${toolName}:`, toolCall.function.arguments?.substring(0, 200));
+            // JSON 파싱 실패한 도구는 에러 응답으로 LLM에게 재시도 유도
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolName,
+              content: JSON.stringify({ success: false, message: 'Invalid JSON arguments. Please retry with valid JSON.', error: 'INVALID_JSON' }),
+            });
+            continue;
           }
 
           console.log(`[Agent] Tool call: ${toolName}`, toolArgs);
