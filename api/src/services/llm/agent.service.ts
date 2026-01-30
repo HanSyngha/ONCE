@@ -8,7 +8,7 @@
  */
 
 import { prisma, io, redis } from '../../index.js';
-import { executeTool, getToolDefinitions, ToolResult } from './tools.service.js';
+import { executeTool, getToolDefinitions, getSearchToolDefinitions, ToolResult } from './tools.service.js';
 import { getTodoToolDefinitions, executeTodoTool } from './todo-tools.service.js';
 import { updateTokenUsage, getTokenWarning, TokenUsageStatus, createAgentSession } from './token.service.js';
 import { emitRequestProgress, emitAskUser, emitRequestFailed } from '../../websocket/server.js';
@@ -435,6 +435,9 @@ export async function runAgentLoop(
   // Undo 스택 (ask_to_user 타임아웃 시 revert 용)
   const undoStack: UndoEntry[] = [];
 
+  // Agent 타입별 도구 세트 선택
+  const tools = type === 'SEARCH' ? getSearchToolDefinitions() : getToolDefinitions();
+
   let iteration = 0;
   let retryCount = 0;
 
@@ -452,7 +455,7 @@ export async function runAgentLoop(
 
     try {
       // LLM 호출
-      const response = await callLLM(messages, request.user, getToolDefinitions());
+      const response = await callLLM(messages, request.user, tools);
 
       // 토큰 사용량 업데이트
       const tokenStatus = updateTokenUsage(session, response.usage);

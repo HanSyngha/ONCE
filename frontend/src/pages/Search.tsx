@@ -1,17 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore } from '../stores/spaceStore';
+
 import { useSettingsStore } from '../stores/settingsStore';
 import { requestsApi } from '../services/api';
 import { showToast } from '../components/common/Toast';
 import RatingPopup, { shouldShowRating } from '../components/common/RatingPopup';
 import EmptyState from '../components/common/EmptyState';
-import { LanguageBadge } from '../components/common/Badge';
+import {
+  on,
+  off,
+  subscribeToRequest,
+  RequestComplete,
+  RequestProgress,
+} from '../services/websocket';
 import {
   MagnifyingGlassIcon,
   DocumentTextIcon,
-  FolderIcon,
   ClockIcon,
   SparklesIcon,
   XMarkIcon,
@@ -22,7 +27,8 @@ const translations = {
   ko: {
     title: '검색',
     placeholder: '무엇이든 찾아 드립니다...',
-    searching: '검색 중...',
+    searching: 'AI가 검색 중입니다...',
+    searchingDetail: '폴더를 탐색하고 관련 노트를 찾고 있습니다',
     results: '검색 결과',
     noResults: '검색 결과가 없습니다',
     noResultsDesc: '다른 검색어로 다시 시도해보세요',
@@ -33,11 +39,13 @@ const translations = {
     all: '전체',
     personal: '개인',
     team: '팀',
+    searchFailed: '검색에 실패했습니다',
   },
   en: {
     title: 'Search',
     placeholder: 'We\'ll find anything for you...',
-    searching: 'Searching...',
+    searching: 'AI is searching...',
+    searchingDetail: 'Exploring folders and finding relevant notes',
     results: 'Search Results',
     noResults: 'No results found',
     noResultsDesc: 'Try a different search term',
@@ -48,11 +56,13 @@ const translations = {
     all: 'All',
     personal: 'Personal',
     team: 'Team',
+    searchFailed: 'Search failed',
   },
   cn: {
     title: '搜索',
     placeholder: '什么都能帮您找到...',
-    searching: '搜索中...',
+    searching: 'AI正在搜索...',
+    searchingDetail: '正在浏览文件夹并查找相关笔记',
     results: '搜索结果',
     noResults: '未找到结果',
     noResultsDesc: '尝试其他搜索词',
@@ -63,43 +73,40 @@ const translations = {
     all: '全部',
     personal: '个人',
     team: '团队',
+    searchFailed: '搜索失败',
   },
 };
 
-interface SearchResult {
-  id: string;
-  name: string;
+interface SearchResultItem {
+  fileId: string;
   path: string;
+  title: string;
   snippet: string;
-  relevance: number;
-  spaceType: 'personal' | 'team';
-  updatedAt: string;
-  hasKO: boolean;
-  hasEN: boolean;
-  hasCN: boolean;
+  relevanceScore: number;
 }
 
 export default function Search() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
-  const { activeTab } = useSpaceStore();
   const { language } = useSettingsStore();
   const t = translations[language];
 
   const [query, setQuery] = useState(searchParams.get('q') || '');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [spaceFilter, setSpaceFilter] = useState<'all' | 'personal' | 'team'>('all');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRating, setShowRating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
 
   const personalSpaceId = user?.spaces?.personalSpaceId;
   const teamSpaceId = user?.spaces?.teamSpaceId;
+  const currentRequestId = useRef<string | null>(null);
 
   useEffect(() => {
-    // Load recent searches from localStorage
     const stored = localStorage.getItem('once_recent_searches');
     if (stored) {
       try {
@@ -110,13 +117,66 @@ export default function Search() {
     }
   }, []);
 
+  const searchQ = searchParams.get('q');
   useEffect(() => {
-    const q = searchParams.get('q');
-    if (q) {
-      setQuery(q);
-      handleSearch(q);
+    if (searchQ) {
+      setQuery(searchQ);
+      handleSearch(searchQ);
     }
-  }, [searchParams]);
+  }, [searchQ]);
+
+  // WebSocket listeners for search results
+  useEffect(() => {
+    const handleComplete = (data: RequestComplete) => {
+      if (data.requestId !== currentRequestId.current) return;
+
+      setIsSearching(false);
+      setProgress(100);
+
+      if (data.success && data.result?.results) {
+        setResults(data.result.results);
+      } else if (data.error) {
+        showToast.error(t.searchFailed);
+        setResults([]);
+      } else {
+        // Success but no results
+        setResults([]);
+      }
+
+      // Rating popup
+      if (shouldShowRating()) {
+        setTimeout(() => setShowRating(true), 600);
+      }
+    };
+
+    const handleFailed = (data: { requestId: string; error: string }) => {
+      if (data.requestId !== currentRequestId.current) return;
+
+      setIsSearching(false);
+      setProgress(0);
+      showToast.error(t.searchFailed);
+      setResults([]);
+    };
+
+    const handleProgress = (data: RequestProgress) => {
+      if (data.requestId !== currentRequestId.current) return;
+
+      setProgress(data.progress);
+      if (data.message) {
+        setProgressMessage(data.message);
+      }
+    };
+
+    on('request:complete', handleComplete);
+    on('request:failed', handleFailed);
+    on('request:progress', handleProgress);
+
+    return () => {
+      off('request:complete', handleComplete);
+      off('request:failed', handleFailed);
+      off('request:progress', handleProgress);
+    };
+  }, [t]);
 
   const saveRecentSearch = (q: string) => {
     const updated = [q, ...recentSearches.filter((s) => s !== q)].slice(0, 5);
@@ -129,7 +189,7 @@ export default function Search() {
     localStorage.removeItem('once_recent_searches');
   };
 
-  const handleSearch = async (searchQuery?: string) => {
+  const handleSearch = useCallback(async (searchQuery?: string) => {
     const q = searchQuery || query;
     if (!q.trim()) return;
 
@@ -144,24 +204,43 @@ export default function Search() {
 
     setIsSearching(true);
     setHasSearched(true);
+    setResults([]);
+    setProgress(0);
+    setProgressMessage('');
     saveRecentSearch(q.trim());
 
     try {
       const response = await requestsApi.search(spaceId, q.trim());
-      setResults(response.data.results || []);
+      const requestId = response.data.request?.id;
 
-      // 20회 요청마다 평가 팝업 표시
-      if (shouldShowRating()) {
-        setTimeout(() => setShowRating(true), 600);
+      if (requestId) {
+        currentRequestId.current = requestId;
+        subscribeToRequest(requestId);
+
+        // Safety timeout — if WebSocket never responds, stop loading after 2 min
+        setTimeout(() => {
+          if (currentRequestId.current === requestId) {
+            setIsSearching((prev) => {
+              if (prev) {
+                setResults([]);
+                showToast.error(t.searchFailed);
+              }
+              return false;
+            });
+          }
+        }, 120_000);
+      } else {
+        // No requestId returned — unexpected
+        setIsSearching(false);
+        setResults([]);
       }
     } catch (error) {
       console.error('Search failed:', error);
-      showToast.error('Search failed');
+      showToast.error(t.searchFailed);
       setResults([]);
-    } finally {
       setIsSearching(false);
     }
-  };
+  }, [query, spaceFilter, personalSpaceId, teamSpaceId, t]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,36 +248,6 @@ export default function Search() {
       setSearchParams({ q: query.trim() });
     }
   };
-
-  const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    const days = Math.floor(diff / 86400000);
-
-    if (language === 'ko') {
-      if (days === 0) return '오늘';
-      if (days === 1) return '어제';
-      if (days < 7) return `${days}일 전`;
-      return date.toLocaleDateString('ko-KR');
-    } else if (language === 'en') {
-      if (days === 0) return 'Today';
-      if (days === 1) return 'Yesterday';
-      if (days < 7) return `${days}d ago`;
-      return date.toLocaleDateString('en-US');
-    } else {
-      if (days === 0) return '今天';
-      if (days === 1) return '昨天';
-      if (days < 7) return `${days}天前`;
-      return date.toLocaleDateString('zh-CN');
-    }
-  };
-
-  const filteredResults = results.filter((r) => {
-    if (spaceFilter === 'all') return true;
-    return r.spaceType === spaceFilter;
-  });
 
   return (
     <>
@@ -272,21 +321,35 @@ export default function Search() {
         <div className="card p-12">
           <div className="flex flex-col items-center">
             <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4" />
-            <p className="text-content-secondary">{t.searching}</p>
+            <p className="text-content-primary font-medium mb-1">{t.searching}</p>
+            <p className="text-content-tertiary text-sm mb-4">{t.searchingDetail}</p>
+            {progress > 0 && (
+              <div className="w-full max-w-xs">
+                <div className="h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(progress, 99)}%` }}
+                  />
+                </div>
+                {progressMessage && (
+                  <p className="text-xs text-content-quaternary mt-2 text-center">{progressMessage}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : hasSearched ? (
-        filteredResults.length > 0 ? (
+        results.length > 0 ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-content-primary">
-                {t.results} ({filteredResults.length})
+                {t.results} ({results.length})
               </h2>
             </div>
-            {filteredResults.map((result) => (
+            {results.map((result) => (
               <div
-                key={result.id}
-                onClick={() => navigate(`/note/${result.id}`)}
+                key={result.fileId}
+                onClick={() => navigate(`/note/${result.fileId}`)}
                 className="card p-4 cursor-pointer hover:border-primary-300 dark:hover:border-primary-700 transition-all"
               >
                 <div className="flex items-start gap-3">
@@ -296,13 +359,8 @@ export default function Search() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-content-primary truncate">
-                        {result.name}
+                        {result.title}
                       </h3>
-                      <div className="flex gap-1">
-                        {result.hasKO && <LanguageBadge language="KO" />}
-                        {result.hasEN && <LanguageBadge language="EN" />}
-                        {result.hasCN && <LanguageBadge language="CN" />}
-                      </div>
                     </div>
                     <p className="text-sm text-content-tertiary mb-2 truncate">
                       {result.path}
@@ -314,12 +372,8 @@ export default function Search() {
                     )}
                     <div className="flex items-center gap-4 mt-2 text-xs text-content-quaternary">
                       <div className="flex items-center gap-1">
-                        <ClockIcon className="w-3.5 h-3.5" />
-                        {getTimeAgo(result.updatedAt)}
-                      </div>
-                      <div className="flex items-center gap-1">
                         <SparklesIcon className="w-3.5 h-3.5" />
-                        {t.relevance}: {Math.round(result.relevance * 100)}%
+                        {t.relevance}: {Math.round(result.relevanceScore)}%
                       </div>
                     </div>
                   </div>

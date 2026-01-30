@@ -28,7 +28,7 @@ async function sendMail(
       },
       body: JSON.stringify({
         to: toEmail,
-        subject: content.subject,
+        mail_title: content.subject,
         body: content.body,
         contentType: 'text/html',
       }),
@@ -481,7 +481,7 @@ function generateDuplicateEmailHtml(
       <div class="similarity">유사도: ${similarity}%</div>
     </div>
 
-    <a href="${BASE_URL}/notes/${existingFilePath}" class="button">노트 확인하기</a>
+    <a href="${BASE_URL}" class="button">노트 확인하기</a>
 
     <div class="footer">
       <p>이 메일은 ${SERVICE_NAME}에서 자동 발송되었습니다.</p>

@@ -425,7 +425,7 @@ export default function Note() {
 
       <div className="flex gap-6">
         {/* Main content */}
-        <div className={`flex-1 min-w-0 ${showComments ? 'lg:max-w-[calc(100%-320px)]' : ''}`}>
+        <div className={`flex-1 min-w-0 ${showComments ? 'lg:max-w-[calc(100%-420px)]' : ''}`}>
           {/* Meta info */}
           <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-content-tertiary">
             <div className="flex items-center gap-1.5">
@@ -458,7 +458,7 @@ export default function Note() {
 
         {/* Comments sidebar */}
         {showComments && (
-          <div className="hidden lg:block w-80 flex-shrink-0">
+          <div className="hidden lg:block w-[400px] flex-shrink-0">
             <div className="sticky top-24">
               <CommentThread fileId={fileId!} />
             </div>

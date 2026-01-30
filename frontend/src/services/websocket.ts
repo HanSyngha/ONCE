@@ -25,9 +25,17 @@ export interface RequestComplete {
   requestId: string;
   success: boolean;
   result?: {
-    filesCreated: string[];
-    filesModified: string[];
-    foldersCreated: string[];
+    filesCreated?: string[];
+    filesModified?: string[];
+    foldersCreated?: string[];
+    results?: Array<{
+      fileId: string;
+      path: string;
+      title: string;
+      snippet: string;
+      relevanceScore: number;
+    }>;
+    summary?: string;
   };
   error?: string;
 }

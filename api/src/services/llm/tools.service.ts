@@ -17,6 +17,15 @@ export interface ToolResult {
 /**
  * OpenAI Function Calling 형식의 도구 정의
  */
+/**
+ * SEARCH agent용 도구 정의 (list_folder, read_file, complete만)
+ */
+export function getSearchToolDefinitions() {
+  const allTools = getToolDefinitions();
+  const searchToolNames = ['list_folder', 'read_file', 'complete'];
+  return allTools.filter(t => searchToolNames.includes(t.function.name));
+}
+
 export function getToolDefinitions() {
   return [
     {
