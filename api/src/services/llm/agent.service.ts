@@ -434,6 +434,7 @@ export async function runAgentLoop(
   const undoStack: UndoEntry[] = [];
 
   let iteration = 0;
+  let retryCount = 0;
 
   while (iteration < MAX_ITERATIONS) {
     iteration++;
@@ -666,6 +667,9 @@ export async function runAgentLoop(
           name: toolName,
           content: JSON.stringify(toolResult),
         });
+
+        // 성공 시 retry 카운트 리셋
+        retryCount = 0;
       } else {
         // tool_choice=required인데 tool call 없이 응답 → 에러로 간주하여 retry
         console.warn(`[Agent] LLM returned no tool call (tool_choice=required), treating as error`);
@@ -673,16 +677,17 @@ export async function runAgentLoop(
       }
 
     } catch (error) {
-      console.error(`[Agent] Iteration ${iteration} error:`, error);
+      retryCount++;
+      console.error(`[Agent] Iteration ${iteration} error (retry ${retryCount}/3):`, error);
 
-      // 재시도 가능한 에러인지 확인
-      if (iteration < 3) {
-        // 처음 3번은 재시도
-        await new Promise(resolve => setTimeout(resolve, 1000 * iteration));
-        continue;
+      if (retryCount >= 3) {
+        console.error(`[Agent] Max retries reached for request ${requestId}, stopping`);
+        throw error;
       }
 
-      throw error;
+      // 에러 후 재시도 대기
+      await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      continue;
     }
   }
 

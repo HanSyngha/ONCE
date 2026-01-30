@@ -41,7 +41,7 @@ interface RatingPopupProps {
   modelName: string;
 }
 
-const RATING_INTERVAL = 2;
+const RATING_INTERVAL = 20;
 const STORAGE_KEY = 'once_request_count';
 
 /** 요청 횟수 추적. 2회마다 true 반환 */
