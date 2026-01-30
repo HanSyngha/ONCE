@@ -15,6 +15,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   SparklesIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 
 const translations = {
@@ -22,6 +23,7 @@ const translations = {
     personal: '개인 공간',
     team: '팀 공간',
     newNote: '새 노트 작성',
+    todo: 'Todo',
     trash: '휴지통',
     empty: '아직 노트가 없습니다',
     createFirst: '첫 번째 노트를 작성해보세요',
@@ -30,6 +32,7 @@ const translations = {
     personal: 'Personal',
     team: 'Team',
     newNote: 'New Note',
+    todo: 'Todo',
     trash: 'Trash',
     empty: 'No notes yet',
     createFirst: 'Create your first note',
@@ -38,6 +41,7 @@ const translations = {
     personal: '个人空间',
     team: '团队空间',
     newNote: '新建笔记',
+    todo: '待办事项',
     trash: '回收站',
     empty: '暂无笔记',
     createFirst: '创建您的第一个笔记',
@@ -155,6 +159,21 @@ export default function Sidebar() {
             <PlusIcon className="w-5 h-5" />
           </button>
 
+          {/* Todo (개인 공간만) */}
+          {activeTab === 'personal' && (
+            <button
+              onClick={() => navigate('/todo')}
+              className={`p-2.5 rounded-xl transition-all ${
+                location.pathname === '/todo'
+                  ? 'bg-surface-secondary text-content-primary'
+                  : 'text-content-tertiary hover:bg-surface-secondary'
+              }`}
+              title={t.todo}
+            >
+              <ClipboardDocumentListIcon className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Trash */}
           <button
             onClick={() => navigate('/trash')}
@@ -262,6 +281,21 @@ export default function Sidebar() {
             <SparklesIcon className="w-4 h-4" />
             {t.newNote}
           </button>
+
+          {/* Todo link (개인 공간만) */}
+          {activeTab === 'personal' && (
+            <button
+              onClick={() => navigate('/todo')}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                location.pathname === '/todo'
+                  ? 'bg-surface-secondary text-content-primary'
+                  : 'text-content-tertiary hover:bg-surface-secondary'
+              }`}
+            >
+              <ClipboardDocumentListIcon className="w-4 h-4" />
+              {t.todo}
+            </button>
+          )}
 
           {/* Trash link */}
           <button

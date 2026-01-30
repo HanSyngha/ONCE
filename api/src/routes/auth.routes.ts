@@ -83,6 +83,16 @@ async function initializeUserAndSpaces(
       },
     });
     console.log(`[Auth] Personal space created for ${loginid}`);
+
+    // Todo 폴더 자동 생성
+    await prisma.folder.create({
+      data: {
+        name: 'Todo',
+        path: '/Todo',
+        spaceId: personalSpace.id,
+      },
+    });
+    console.log(`[Auth] Todo folder created for ${loginid}`);
   }
 
   // 3. 팀 조회 또는 생성

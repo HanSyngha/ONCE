@@ -4,7 +4,8 @@
  * 큐에서 가져온 작업 처리
  */
 
-import { runAgentLoop } from '../llm/agent.service.js';
+import { runAgentLoop, runTodoAgentLoop } from '../llm/agent.service.js';
+import { prisma } from '../../index.js';
 
 export interface ProcessResult {
   filesCreated: string[];
@@ -33,7 +34,26 @@ export async function processInputRequest(
 ): Promise<ProcessResult> {
   console.log(`[Processor] Processing INPUT request: ${requestId}`);
 
-  const result = await runAgentLoop(requestId, spaceId, 'INPUT', input);
+  // 개인 공간 여부 확인 (Todo agent는 개인 공간에서만 실행)
+  const space = await prisma.space.findUnique({
+    where: { id: spaceId },
+    select: { userId: true },
+  });
+
+  const request = await prisma.request.findUnique({
+    where: { id: requestId },
+    select: { userId: true },
+  });
+
+  // INPUT agent + Todo agent 병렬 실행
+  const [result] = await Promise.all([
+    runAgentLoop(requestId, spaceId, 'INPUT', input),
+    // 개인 공간인 경우에만 Todo agent 병렬 실행 (실패해도 INPUT에 영향 없음)
+    space?.userId && request
+      ? runTodoAgentLoop(requestId, request.userId, spaceId, input)
+          .catch(err => console.error('[Processor] Todo agent error (non-fatal):', err))
+      : Promise.resolve(),
+  ]);
 
   return {
     filesCreated: result.filesCreated || [],

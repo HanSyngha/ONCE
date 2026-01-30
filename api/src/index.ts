@@ -15,11 +15,12 @@ import dotenv from 'dotenv';
 import { authRoutes } from './routes/auth.routes.js';
 import { spacesRoutes } from './routes/spaces.routes.js';
 import { filesRoutes } from './routes/files.routes.js';
-import { requestsRoutes } from './routes/requests.routes.js';
+import { requestsRoutes, quickAddRoutes } from './routes/requests.routes.js';
 import { commentsRoutes } from './routes/comments.routes.js';
 import { trashRoutes } from './routes/trash.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
+import { todosRoutes } from './routes/todos.routes.js';
 
 // WebSocket
 import { setupWebSocket } from './websocket/server.js';
@@ -118,10 +119,12 @@ app.use('/auth', authRoutes);
 app.use('/spaces', spacesRoutes);
 app.use('/files', filesRoutes);
 app.use('/requests', requestsRoutes);
+app.use('/quick-add', quickAddRoutes);
 app.use('/comments', commentsRoutes);
 app.use('/trash', trashRoutes);
 app.use('/admin', adminRoutes);
 app.use('/settings', settingsRoutes);
+app.use('/todos', todosRoutes);
 
 // Setup Swagger API docs
 setupSwagger(app);

@@ -52,7 +52,9 @@ function FolderNode({ node, level }: FolderNodeProps) {
   const paddingLeft = 12 + level * 16;
 
   // 폴더 삭제 권한: 개인 공간은 본인, 팀 공간은 Super Admin만
-  const canDeleteFolder = activeTab === 'personal' || user?.isSuperAdmin;
+  // 개인 공간의 Todo 폴더는 삭제 불가
+  const isTodoFolder = activeTab === 'personal' && node.path === '/Todo';
+  const canDeleteFolder = !isTodoFolder && (activeTab === 'personal' || user?.isSuperAdmin);
 
   const openMenu = (anchor: HTMLElement) => {
     const rect = anchor.getBoundingClientRect();

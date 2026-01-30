@@ -12,6 +12,7 @@ import { addToQueue, getQueuePosition, cancelRequest } from '../services/queue/b
 import { resolveUserAnswer } from '../services/llm/agent.service.js';
 
 export const requestsRoutes = Router();
+export const quickAddRoutes = Router();
 
 requestsRoutes.use(authenticateToken);
 requestsRoutes.use(loadUserId);
@@ -491,5 +492,120 @@ requestsRoutes.get('/queue-status', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Get queue status error:', error);
     res.status(500).json({ error: 'Failed to get queue status' });
+  }
+});
+
+/**
+ * @swagger
+ * /quick-add:
+ *   post:
+ *     summary: 아무거나 추가 (개인 공간)
+ *     description: |
+ *       loginid로 사용자를 식별하여 개인 공간에 노트를 추가합니다.
+ *       인증 없이 사용 가능합니다.
+ *     tags: [Quick Add]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *               - input
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 description: 사용자 loginid
+ *               input:
+ *                 type: string
+ *                 description: 정리할 내용 (최대 100,000자)
+ *           example:
+ *             id: "hong.gildong"
+ *             input: "오늘 회의 내용 정리해줘..."
+ *     responses:
+ *       201:
+ *         description: 요청 생성 성공
+ *       400:
+ *         description: 잘못된 요청
+ *       404:
+ *         description: 사용자를 찾을 수 없음
+ */
+quickAddRoutes.post('/', async (req, res) => {
+  try {
+    const { id, input } = req.body;
+
+    if (!id || !input) {
+      res.status(400).json({ error: 'id and input are required' });
+      return;
+    }
+
+    if (input.length > 100000) {
+      res.status(400).json({ error: 'Input is too long. Maximum 100,000 characters.' });
+      return;
+    }
+
+    // loginid로 사용자 조회
+    const user = await prisma.user.findUnique({
+      where: { loginid: id },
+      include: {
+        personalSpace: { select: { id: true } },
+      },
+    });
+
+    if (!user || !user.personalSpace) {
+      res.status(404).json({ error: 'User or personal space not found' });
+      return;
+    }
+
+    const spaceId = user.personalSpace.id;
+
+    // 요청 생성
+    const request = await prisma.request.create({
+      data: {
+        userId: user.id,
+        spaceId,
+        type: 'INPUT',
+        input,
+        status: 'PENDING',
+      },
+    });
+
+    // 큐에 추가
+    const position = await addToQueue(request.id, spaceId, 'INPUT');
+
+    // 감사 로그
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        spaceId,
+        action: 'CREATE_NOTE',
+        targetType: 'REQUEST',
+        targetId: request.id,
+        details: { inputLength: input.length, source: 'quick-add' },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'] || null,
+      },
+    });
+
+    // WebSocket으로 큐 상태 전송
+    io.to(`user:${user.id}`).emit('queue:update', {
+      requestId: request.id,
+      position,
+      status: 'waiting',
+    });
+
+    res.status(201).json({
+      request: {
+        id: request.id,
+        status: request.status,
+        position,
+        createdAt: request.createdAt,
+      },
+      message: '입력이 접수되었습니다. 잠시 후 AI가 정리해드립니다.',
+    });
+  } catch (error) {
+    console.error('Quick add error:', error);
+    res.status(500).json({ error: 'Failed to process quick add request' });
   }
 });

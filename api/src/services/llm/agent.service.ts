@@ -9,6 +9,7 @@
 
 import { prisma, io, redis } from '../../index.js';
 import { executeTool, getToolDefinitions, ToolResult } from './tools.service.js';
+import { getTodoToolDefinitions, executeTodoTool } from './todo-tools.service.js';
 import { updateTokenUsage, getTokenWarning, TokenUsageStatus, createAgentSession } from './token.service.js';
 import { emitRequestProgress, emitAskUser, emitRequestFailed } from '../../websocket/server.js';
 import { sendFailureEmail } from '../mail.service.js';
@@ -178,7 +179,7 @@ interface AgentResult {
 /**
  * 시스템 프롬프트 생성
  */
-function getSystemPrompt(type: 'INPUT' | 'SEARCH' | 'REFACTOR', treeStructure: string): string {
+function getSystemPrompt(type: 'INPUT' | 'SEARCH' | 'REFACTOR', treeStructure: string, isPersonalSpace: boolean = false): string {
   const basePrompt = `당신은 ONCE의 AI 어시스턴트입니다.
 사용자의 입력을 분석하여 노트를 자동으로 정리하고 저장합니다.
 
@@ -209,7 +210,8 @@ ${treeStructure || '(빈 공간)'}
 4. 폴더명은 짧고 명확한 카테고리명 (예: "회의록", "설계문서", "학습노트")
 5. 파일명은 제목 역할 — 검색 시 폴더명+파일명만 보고도 내용을 짐작할 수 있어야 합니다.
 6. 적절한 깊이로 분류하되, 불필요하게 깊지 않도록 하세요 (보통 2~4단계가 적절).
-`;
+${isPersonalSpace ? '\n### 개인 공간 폴더 깊이 제한\n이 공간은 **개인 공간**입니다. 폴더 깊이는 **최대 4단계**까지만 허용됩니다 (5단계 이상 불가).\n예: /대분류/중분류/소분류/세부분류 (4단계 — 허용)\n예: /대분류/중분류/소분류/세부분류/항목 (5단계 — 불가)\n폴더 구조를 설계할 때 이 제한을 반드시 고려하세요.\n' : ''}`;
+
 
   if (type === 'INPUT') {
     return basePrompt + `
@@ -327,7 +329,8 @@ ${treeStructure || '(빈 공간)'}
 async function callLLMWithModel(
   messages: LLMMessage[],
   user: { loginid: string; username: string; deptname: string },
-  model: string
+  model: string,
+  tools: any[]
 ): Promise<LLMResponse> {
   const response = await fetch(LLM_PROXY_URL, {
     method: 'POST',
@@ -341,8 +344,8 @@ async function callLLMWithModel(
     body: JSON.stringify({
       model,
       messages,
-      tools: getToolDefinitions(),
-      tool_choice: 'auto',
+      tools,
+      tool_choice: 'required',
     }),
   });
 
@@ -359,7 +362,8 @@ async function callLLMWithModel(
  */
 async function callLLM(
   messages: LLMMessage[],
-  user: { loginid: string; username: string; deptname: string }
+  user: { loginid: string; username: string; deptname: string },
+  tools: any[]
 ): Promise<LLMResponse> {
   const config = await getModelConfig(user);
   const modelsToTry = [config.defaultModel, ...config.fallbackModels];
@@ -369,7 +373,7 @@ async function callLLM(
   for (const model of modelsToTry) {
     try {
       console.log(`[Agent] Trying model: ${model}`);
-      const response = await callLLMWithModel(messages, user, model);
+      const response = await callLLMWithModel(messages, user, model, tools);
       return response;
     } catch (error) {
       lastError = error as Error;
@@ -403,13 +407,17 @@ export async function runAgentLoop(
   // 공간 트리 구조 조회
   const treeStructure = await getTreeStructure(spaceId);
 
+  // 개인 공간 여부 확인
+  const space = await prisma.space.findUnique({ where: { id: spaceId } });
+  const isPersonalSpace = space?.userId != null;
+
   // 세션 초기화 (Redis에서 설정된 모델 사용, 사업부 필터링 반영)
   const modelConfig = await getModelConfig(request.user);
   const session = createAgentSession(modelConfig.defaultModel);
 
   // 초기 메시지
   const messages: LLMMessage[] = [
-    { role: 'system', content: getSystemPrompt(type, treeStructure) },
+    { role: 'system', content: getSystemPrompt(type, treeStructure, isPersonalSpace) },
     { role: 'user', content: userInput },
   ];
 
@@ -439,7 +447,7 @@ export async function runAgentLoop(
 
     try {
       // LLM 호출
-      const response = await callLLM(messages, request.user);
+      const response = await callLLM(messages, request.user, getToolDefinitions());
 
       // 토큰 사용량 업데이트
       const tokenStatus = updateTokenUsage(session, response.usage);
@@ -642,11 +650,10 @@ export async function runAgentLoop(
             content: JSON.stringify(toolResult),
           });
         }
-      } else if (choice.finish_reason === 'stop') {
-        // Tool call 없이 종료된 경우
-        console.log(`[Agent] LLM finished without complete() call`);
-        result.summary = assistantMessage.content || 'Task completed';
-        return result;
+      } else {
+        // tool_choice=required인데 tool call 없이 응답 → 에러로 간주하여 retry
+        console.warn(`[Agent] LLM returned no tool call (tool_choice=required), treating as error`);
+        throw new Error('LLM returned no tool call with tool_choice=required');
       }
 
     } catch (error) {
@@ -704,4 +711,176 @@ async function getTreeStructure(spaceId: string): Promise<string> {
   }
 
   return lines.join('\n') || '(빈 공간 - 아직 노트가 없습니다)';
+}
+
+/**
+ * Todo Agent Loop
+ *
+ * 매 INPUT 요청 시 병렬로 실행되는 Todo 전용 agent.
+ * 사용자 입력에서 action item을 추출하여 Todo를 추가/완료/수정합니다.
+ * - 최대 50 iterations
+ * - tool_choice: required
+ * - nothing_more_todo 호출 시 종료
+ */
+const TODO_MAX_ITERATIONS = 50;
+
+export async function runTodoAgentLoop(
+  requestId: string,
+  userId: string,
+  spaceId: string,
+  userInput: string
+): Promise<void> {
+  // 사용자 정보 조회
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { loginid: true, username: true, deptname: true },
+  });
+
+  if (!user) {
+    console.error(`[TodoAgent] User not found: ${userId}`);
+    return;
+  }
+
+  // 현재 Todo 목록 조회 (미완료 + 최근 완료 포함, 최대 200개)
+  const currentTodos = await prisma.todo.findMany({
+    where: { userId, spaceId },
+    orderBy: [
+      { completed: 'asc' },
+      { startDate: 'asc' },
+    ],
+    take: 200,
+  });
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const todoListStr = currentTodos.length > 0
+    ? currentTodos.map(t => {
+        const status = t.completed ? '✅ 완료' : '⬜ 미완료';
+        const start = t.startDate.toISOString().split('T')[0];
+        const end = t.endDate.toISOString().split('T')[0];
+        return `- [${status}] ${t.title} (${start} ~ ${end})${t.content ? ` — ${t.content}` : ''}`;
+      }).join('\n')
+    : '(등록된 Todo 없음)';
+
+  const systemPrompt = `당신은 ONCE의 Todo 추출 에이전트입니다.
+사용자의 입력을 분석하여 할일(action item)을 추출하고 Todo를 관리합니다.
+
+## 오늘 날짜
+${todayStr}
+
+## 사용자 정보
+- 이름: ${user.username}
+- 부서: ${user.deptname}
+
+## 현재 Todo 목록
+${todoListStr}
+
+## 사용 가능한 도구
+- add_todo(title, content?, startDate?, endDate?): 새 Todo 추가. 기본값: startDate=오늘, endDate=1년 후
+- complete_todo(title): 제목으로 기존 Todo를 완료 처리
+- update_todo(title, startDate?, endDate?): 제목으로 기존 Todo의 기간 수정
+- nothing_more_todo(): 더 이상 처리할 Todo가 없을 때 호출
+
+## 규칙
+1. 사용자 입력에서 할일, 해야 할 작업, 약속, 일정 등을 모두 추출하세요.
+2. 이미 완료된 작업이 언급되면 complete_todo로 완료 처리하세요.
+3. 기간 변경이 언급되면 update_todo로 수정하세요.
+4. 중복 Todo를 만들지 마세요. 현재 Todo 목록을 확인하세요.
+5. 한 번에 하나의 도구만 호출하세요.
+6. 모든 Todo 추가/수정/완료 작업을 마친 후 반드시 nothing_more_todo를 호출하세요.
+7. 입력에 할일이 전혀 없다면 즉시 nothing_more_todo를 호출하세요.
+8. Todo 제목은 한국어로 간결하게 작성하세요.`;
+
+  const messages: LLMMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userInput },
+  ];
+
+  const todoTools = getTodoToolDefinitions();
+  let iteration = 0;
+  let retryCount = 0;
+
+  while (iteration < TODO_MAX_ITERATIONS) {
+    iteration++;
+
+    console.log(`[TodoAgent] Iteration ${iteration} for request ${requestId}`);
+
+    try {
+      const response = await callLLM(messages, user, todoTools);
+
+      const choice = response.choices[0];
+      if (!choice) {
+        throw new Error('No response from LLM');
+      }
+
+      const assistantMessage = choice.message;
+
+      // 히스토리에 추가
+      messages.push({
+        role: 'assistant',
+        content: assistantMessage.content ?? '',
+        tool_calls: assistantMessage.tool_calls,
+      });
+
+      // tool call 필수
+      if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+        throw new Error('LLM returned no tool call with tool_choice=required');
+      }
+
+      // 첫 번째 tool call만 처리 (한 번에 하나)
+      const toolCall = assistantMessage.tool_calls[0];
+      const toolName = toolCall.function.name;
+      let toolArgs: Record<string, any>;
+
+      try {
+        toolArgs = JSON.parse(toolCall.function.arguments);
+      } catch {
+        toolArgs = {};
+      }
+
+      console.log(`[TodoAgent] Tool call: ${toolName}`, toolArgs);
+
+      // nothing_more_todo → 종료
+      if (toolName === 'nothing_more_todo') {
+        console.log(`[TodoAgent] Completed for request ${requestId} after ${iteration} iterations`);
+        return;
+      }
+
+      // 도구 실행
+      const toolResult = await executeTodoTool(userId, spaceId, toolName, toolArgs);
+
+      console.log(`[TodoAgent] Tool result: ${toolResult.message}`);
+
+      // 도구 결과를 히스토리에 추가
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        name: toolName,
+        content: JSON.stringify(toolResult),
+      });
+
+      // done 플래그 (방어적 체크)
+      if (toolResult.done) {
+        console.log(`[TodoAgent] Done flag received for request ${requestId}`);
+        return;
+      }
+
+      // 성공 시 retry 카운터 리셋
+      retryCount = 0;
+
+    } catch (error) {
+      retryCount++;
+      console.error(`[TodoAgent] Iteration ${iteration} error (retry ${retryCount}/3):`, error);
+
+      if (retryCount >= 3) {
+        console.error(`[TodoAgent] Max retries reached for request ${requestId}, stopping`);
+        return;
+      }
+
+      // 재시도 대기
+      await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+    }
+  }
+
+  console.warn(`[TodoAgent] Max iterations (${TODO_MAX_ITERATIONS}) reached for request ${requestId}`);
 }

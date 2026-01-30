@@ -528,6 +528,12 @@ filesRoutes.delete('/folders/:id', async (req: AuthenticatedRequest, res) => {
     const isPersonalSpace = folder.space.userId != null;
     const superAdmin = isSuperAdmin(req.user!.loginid);
 
+    // 개인 공간의 Todo 폴더는 삭제 불가
+    if (isPersonalSpace && folder.path === '/Todo') {
+      res.status(403).json({ error: 'Todo folder cannot be deleted' });
+      return;
+    }
+
     if (isPersonalSpace) {
       // 개인 공간: 본인만 삭제 가능
       if (folder.space.userId !== req.userId) {

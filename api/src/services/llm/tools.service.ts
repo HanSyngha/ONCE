@@ -413,8 +413,14 @@ async function addFolder(spaceId: string, path: string): Promise<ToolResult> {
     return { success: true, message: `Folder already exists: ${normalizedPath}` };
   }
 
-  // 상위 폴더 찾기 또는 생성
+  // 개인 공간: 폴더 depth 5 미만 제한
   const pathParts = normalizedPath.split('/').filter(Boolean);
+  const space = await prisma.space.findUnique({ where: { id: spaceId } });
+  if (space?.userId && pathParts.length >= 5) {
+    return { success: false, message: `Folder depth limit exceeded. Personal space allows max 4 levels (current: ${pathParts.length})`, error: 'DEPTH_LIMIT' };
+  }
+
+  // 상위 폴더 찾기 또는 생성
   let parentId: string | null = null;
   let currentPath = '';
 
@@ -469,6 +475,12 @@ async function deleteFolder(spaceId: string, path: string): Promise<ToolResult> 
     return { success: false, message: `Folder is not empty: ${normalizedPath}`, error: 'NOT_EMPTY' };
   }
 
+  // 개인 공간의 Todo 폴더는 삭제 불가
+  const space = await prisma.space.findUnique({ where: { id: spaceId } });
+  if (space?.userId && normalizedPath === '/Todo') {
+    return { success: false, message: 'Todo folder cannot be deleted', error: 'PROTECTED' };
+  }
+
   await prisma.folder.delete({
     where: { id: folder.id },
   });
@@ -491,6 +503,12 @@ async function editFolderName(spaceId: string, path: string, newName: string): P
 
   if (!folder) {
     return { success: false, message: `Folder not found: ${normalizedPath}`, error: 'NOT_FOUND' };
+  }
+
+  // 개인 공간의 Todo 폴더는 이름 변경 불가
+  const space = await prisma.space.findUnique({ where: { id: spaceId } });
+  if (space?.userId && normalizedPath === '/Todo') {
+    return { success: false, message: 'Todo folder cannot be renamed', error: 'PROTECTED' };
   }
 
   // 새 경로 계산
