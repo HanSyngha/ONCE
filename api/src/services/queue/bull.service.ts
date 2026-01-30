@@ -161,12 +161,8 @@ export async function addToQueue(
     {
       // 같은 공간의 작업은 순차 처리
       jobId: `${spaceId}-${requestId}`,
-      // 실패 시 재시도
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 1000,
-      },
+      // Agent 내부에 retry 로직이 있으므로 job 레벨 재시도 안 함 (중복 생성 방지)
+      attempts: 1,
     }
   );
 
