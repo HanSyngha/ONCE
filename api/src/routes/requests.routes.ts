@@ -353,6 +353,10 @@ requestsRoutes.get('/queue-status', async (req: AuthenticatedRequest, res) => {
  * 요청 상태 조회
  */
 requestsRoutes.get('/:id', async (req: AuthenticatedRequest, res) => {
+  // polling fallback에서 304 캐시로 pendingQuestion을 놓치는 것 방지
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.removeHeader('ETag');
+
   try {
     const { id } = req.params;
 
