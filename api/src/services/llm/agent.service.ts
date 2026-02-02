@@ -260,7 +260,7 @@ ${isPersonalSpace ? '\n### 개인 공간 폴더 깊이 제한\n이 공간은 **�
 - **핵심 내용은 bullet list로 정리**하세요. 장문의 서술보다 bullet이 읽기 쉽습니다.
 - **순서가 있는 절차/단계는 numbered list**를 쓰세요.
 - 중요한 결정사항, 결론, 핵심 포인트는 **bold** 텍스트로 강조하세요.
-- 비교/정리가 필요한 데이터는 **table**을 사용하세요.
+- 비교/정리가 필요한 데이터는 **heading + bulletListItem 조합**으로 정리하세요. table 블록은 사용하지 마세요.
 - 코드, 명령어, 설정값은 **codeBlock**에 넣으세요.
 - 노트는 **나중에 이 주제를 모르는 사람이 봐도 맥락을 이해할 수 있도록** 작성하세요. 축약어나 맥락 없는 단어 나열은 피하세요.
 - 불필요한 인사말, 감사 표현, 서론은 제거하고 **핵심 내용만** 담으세요.
@@ -289,11 +289,7 @@ italic: { "type": "text", "text": "기울임", "styles": { "italic": true } }
 ### codeBlock — 코드/명령어
 { "type": "codeBlock", "props": { "language": "bash" }, "content": [{ "type": "text", "text": "npm install" }] }
 
-### table — 표
-{ "type": "table", "content": { "type": "tableContent", "rows": [
-  { "cells": [[{ "type": "text", "text": "헤더1" }], [{ "type": "text", "text": "헤더2" }]] },
-  { "cells": [[{ "type": "text", "text": "값1" }], [{ "type": "text", "text": "값2" }]] }
-] } }
+**주의: table 블록은 사용하지 마세요.** 비교/정리가 필요한 데이터는 heading + bulletListItem으로 표현하세요.
 
 ### 작성 예시
 입력: "프로젝트 킥오프 회의. 참석: 김철수, 이영희. 일정은 3월까지. 김철수가 백엔드, 이영희가 프론트 담당. Docker 사용하기로 함. next.js 쓸지 react 쓸지 다음주에 결정"
