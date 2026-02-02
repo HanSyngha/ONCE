@@ -5,7 +5,7 @@
  */
 
 import { Router } from 'express';
-import { prisma, io } from '../index.js';
+import { prisma, io, redis } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUserId, isSuperAdmin } from '../middleware/auth.js';
 import { inputRateLimiter, searchRateLimiter } from '../middleware/rateLimit.js';
 import { addToQueue, getQueuePosition, cancelRequest } from '../services/queue/bull.service.js';
@@ -383,6 +383,17 @@ requestsRoutes.get('/:id', async (req: AuthenticatedRequest, res) => {
       position = await getQueuePosition(request.id, request.spaceId);
     }
 
+    // ask_to_user 대기 중인 질문이 있는지 Redis 확인
+    let pendingQuestion = null;
+    if (request.status === 'PROCESSING') {
+      const askData = await redis.get(`ask_user:${request.id}`);
+      if (askData) {
+        try {
+          pendingQuestion = JSON.parse(askData);
+        } catch { /* ignore */ }
+      }
+    }
+
     res.json({
       request: {
         id: request.id,
@@ -397,6 +408,7 @@ requestsRoutes.get('/:id', async (req: AuthenticatedRequest, res) => {
         createdAt: request.createdAt,
         startedAt: request.startedAt,
         completedAt: request.completedAt,
+        pendingQuestion,
       },
       logs: request.logs.map(log => ({
         id: log.id,

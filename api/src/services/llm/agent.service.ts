@@ -602,7 +602,14 @@ export async function runAgentLoop(
 
         // ask_to_user 처리: WebSocket으로 질문 전송 후 응답 대기
         if (toolName === 'ask_to_user') {
-          emitAskUser(io, requestId, {
+          // Redis에 질문 데이터 저장 (polling fallback용)
+          await redis.set(
+            `ask_user:${requestId}`,
+            JSON.stringify({ question: toolArgs.question, options: toolArgs.options, timeoutMs: 180_000 }),
+            'EX', 200
+          );
+
+          emitAskUser(io, requestId, request.user.loginid, {
             question: toolArgs.question,
             options: toolArgs.options,
             timeoutMs: 180_000,
@@ -622,6 +629,7 @@ export async function runAgentLoop(
           } catch (err) {
             if ((err as Error).message === 'ASK_USER_TIMEOUT') {
               console.log(`[Agent] ask_to_user timeout for request ${requestId}, reverting ${undoStack.length} changes`);
+              await redis.del(`ask_user:${requestId}`);
               await revertChanges(spaceId, undoStack);
               await prisma.request.update({
                 where: { id: requestId },
@@ -638,6 +646,9 @@ export async function runAgentLoop(
             }
             throw err;
           }
+
+          // Redis에서 질문 데이터 삭제
+          await redis.del(`ask_user:${requestId}`);
 
           // 응답을 tool result로 LLM에 전달
           messages.push({

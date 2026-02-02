@@ -140,6 +140,7 @@ export function emitRequestComplete(
 export function emitAskUser(
   io: SocketIOServer,
   requestId: string,
+  loginid: string,
   data: {
     question: string;
     options: string[];
@@ -147,6 +148,11 @@ export function emitAskUser(
   }
 ): void {
   io.to(`request:${requestId}`).emit('request:ask_user', {
+    requestId,
+    ...data,
+  });
+
+  io.to(`user:${loginid}`).emit('request:ask_user', {
     requestId,
     ...data,
   });

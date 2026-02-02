@@ -167,13 +167,24 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
             refresh();
             return 'completed';
           });
-        } else if (req.status === 'FAILED') {
+        } else if (req.status === 'FAILED' || req.status === 'CANCELLED') {
           stopPolling();
           setStatus((prev) => {
             if (prev === 'completed' || prev === 'failed') return prev;
             setError(req.error || t.error);
             return 'failed';
           });
+        } else if (req.status === 'PROCESSING' && req.pendingQuestion && !askUserData) {
+          // WebSocket으로 ask_user 이벤트를 놓친 경우 polling fallback
+          setAskUserData({
+            requestId: rid,
+            question: req.pendingQuestion.question,
+            options: req.pendingQuestion.options,
+            timeoutMs: req.pendingQuestion.timeoutMs,
+          });
+          setAskDeadline(Date.now() + req.pendingQuestion.timeoutMs);
+          setSelectedOption(null);
+          setCustomAnswer('');
         }
       } catch {
         // 폴링 에러는 무시
@@ -344,6 +355,15 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
   };
 
   const handleClose = () => {
+    // ask_to_user 대기 중이면 닫기 허용 + 기본 응답 전송
+    if (askUserData && requestId) {
+      requestsApi.answerQuestion(requestId, askUserData.options[0] || '확인').catch(() => {});
+      handleReset();
+      setInput('');
+      onClose();
+      return;
+    }
+
     if (status === 'submitting' || status === 'queued' || status === 'processing') {
       // Don't close while in progress
       return;
