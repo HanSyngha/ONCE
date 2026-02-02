@@ -233,11 +233,11 @@ export default function Trash() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     if (language === 'ko') {
-      return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
     } else if (language === 'en') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
     } else {
-      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
     }
   };
 

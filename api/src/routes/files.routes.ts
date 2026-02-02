@@ -263,7 +263,7 @@ filesRoutes.post('/:id/export', async (req: AuthenticatedRequest, res) => {
     if (includeComments && file.comments && file.comments.length > 0) {
       markdown += '\n\n---\n\n## Comments\n\n';
       for (const comment of file.comments as any[]) {
-        markdown += `**${comment.user?.username || 'Unknown'}** (${comment.createdAt.toISOString()}):\n`;
+        markdown += `**${comment.user?.username || 'Unknown'}** (${comment.createdAt.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' })}):\n`;
         markdown += `> ${comment.content}\n\n`;
 
         if (comment.replies) {

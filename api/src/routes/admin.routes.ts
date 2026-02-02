@@ -422,7 +422,7 @@ adminRoutes.get('/stats', requireTeamAdminOrHigher, async (req: AuthenticatedReq
       },
       period: {
         days: Number(days),
-        since: since.toISOString(),
+        since: since.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
       },
     });
   } catch (error) {
@@ -644,7 +644,7 @@ adminRoutes.put('/model-config', requireSuperAdmin, async (req: AuthenticatedReq
       defaultModel,
       fallbackModels: fallbackModels || [],
       updatedBy: req.user!.loginid,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
     };
 
     await redis.set(MODEL_CONFIG_KEY, JSON.stringify(config));

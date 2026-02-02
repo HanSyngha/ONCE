@@ -132,19 +132,19 @@ export default function Home() {
       if (minutes < 60) return `${minutes}분 전`;
       if (hours < 24) return `${hours}시간 전`;
       if (days < 7) return `${days}일 전`;
-      return date.toLocaleDateString('ko-KR');
+      return date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
     } else if (language === 'en') {
       if (minutes < 1) return 'Just now';
       if (minutes < 60) return `${minutes}m ago`;
       if (hours < 24) return `${hours}h ago`;
       if (days < 7) return `${days}d ago`;
-      return date.toLocaleDateString('en-US');
+      return date.toLocaleDateString('en-US', { timeZone: 'Asia/Seoul' });
     } else {
       if (minutes < 1) return '刚刚';
       if (minutes < 60) return `${minutes}分钟前`;
       if (hours < 24) return `${hours}小时前`;
       if (days < 7) return `${days}天前`;
-      return date.toLocaleDateString('zh-CN');
+      return date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Seoul' });
     }
   };
 

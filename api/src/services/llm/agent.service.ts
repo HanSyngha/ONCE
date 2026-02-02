@@ -809,8 +809,8 @@ export async function runTodoAgentLoop(
   const todoListStr = currentTodos.length > 0
     ? currentTodos.map(t => {
         const status = t.completed ? '✅ 완료' : '⬜ 미완료';
-        const start = t.startDate.toISOString().split('T')[0];
-        const end = t.endDate.toISOString().split('T')[0];
+        const start = t.startDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+        const end = t.endDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
         return `- [${status}] ${t.title} (${start} ~ ${end})${t.content ? ` — ${t.content}` : ''}`;
       }).join('\n')
     : '(등록된 Todo 없음)';

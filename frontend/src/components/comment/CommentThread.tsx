@@ -178,19 +178,19 @@ export default function CommentThread({ fileId, blockId }: CommentThreadProps) {
       if (minutes < 60) return `${minutes}분`;
       if (hours < 24) return `${hours}시간`;
       if (days < 7) return `${days}일`;
-      return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
     } else if (language === 'en') {
       if (minutes < 1) return 'now';
       if (minutes < 60) return `${minutes}m`;
       if (hours < 24) return `${hours}h`;
       if (days < 7) return `${days}d`;
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
     } else {
       if (minutes < 1) return '刚刚';
       if (minutes < 60) return `${minutes}分`;
       if (hours < 24) return `${hours}时`;
       if (days < 7) return `${days}天`;
-      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
     }
   };
 

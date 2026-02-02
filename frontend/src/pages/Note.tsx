@@ -229,6 +229,7 @@ export default function Note() {
     const date = new Date(dateString);
     if (language === 'ko') {
       return date.toLocaleDateString('ko-KR', {
+        timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -237,6 +238,7 @@ export default function Note() {
       });
     } else if (language === 'en') {
       return date.toLocaleDateString('en-US', {
+        timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -245,6 +247,7 @@ export default function Note() {
       });
     } else {
       return date.toLocaleDateString('zh-CN', {
+        timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: 'long',
         day: 'numeric',

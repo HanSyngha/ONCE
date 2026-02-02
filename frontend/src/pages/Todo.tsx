@@ -82,12 +82,12 @@ function getViewLabel(view: ViewMode, date: Date, language: string): string {
   if (view === 'week') {
     const { start, end } = getWeekRange(date);
     const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    return `${start.toLocaleDateString(locale, opts)} — ${end.toLocaleDateString(locale, opts)}`;
+    return `${start.toLocaleDateString(locale, { ...opts, timeZone: 'Asia/Seoul' })} — ${end.toLocaleDateString(locale, { ...opts, timeZone: 'Asia/Seoul' })}`;
   }
   if (view === 'month') {
-    return date.toLocaleDateString(locale, { year: 'numeric', month: 'long' });
+    return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', timeZone: 'Asia/Seoul' });
   }
-  return date.toLocaleDateString(locale, { year: 'numeric' });
+  return date.toLocaleDateString(locale, { year: 'numeric', timeZone: 'Asia/Seoul' });
 }
 
 function navigateDate(date: Date, view: ViewMode, direction: number): Date {
@@ -133,7 +133,7 @@ function daysBetween(a: Date, b: Date): number {
 
 function formatShortDate(d: Date, language: string): string {
   const locale = language === 'ko' ? 'ko-KR' : language === 'cn' ? 'zh-CN' : 'en-US';
-  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' });
 }
 
 // ─── Timeline column labels ───
@@ -147,7 +147,7 @@ function getTimelineColumns(view: ViewMode, date: Date, language: string): { lab
     const d = new Date(start);
     while (d <= end) {
       cols.push({
-        label: d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric' }),
+        label: d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', timeZone: 'Asia/Seoul' }),
         date: new Date(d),
       });
       d.setDate(d.getDate() + 1);
@@ -166,7 +166,7 @@ function getTimelineColumns(view: ViewMode, date: Date, language: string): { lab
     for (let m = 0; m < 12; m++) {
       const md = new Date(date.getFullYear(), m, 1);
       cols.push({
-        label: md.toLocaleDateString(locale, { month: 'short' }),
+        label: md.toLocaleDateString(locale, { month: 'short', timeZone: 'Asia/Seoul' }),
         date: md,
       });
     }
@@ -238,7 +238,7 @@ export default function Todo() {
     if (!spaceId) return;
     setLoading(true);
     try {
-      const dateStr = currentDate.toISOString().split('T')[0];
+      const dateStr = currentDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
       const res = await todosApi.list(spaceId, view, dateStr);
       setTodos(res.data.todos || []);
     } catch (error) {

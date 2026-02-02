@@ -919,8 +919,8 @@ quickAddRoutes.get('/todos', async (req, res) => {
     res.json({
       todos,
       range: {
-        start: start.toISOString(),
-        end: end.toISOString(),
+        start: start.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
+        end: end.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
       },
       total: todos.length,
     });

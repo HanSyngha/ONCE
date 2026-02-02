@@ -593,6 +593,7 @@ export default function Admin() {
     const date = new Date(dateString);
     if (language === 'ko') {
       return date.toLocaleString('ko-KR', {
+        timeZone: 'Asia/Seoul',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -600,6 +601,7 @@ export default function Admin() {
       });
     } else if (language === 'en') {
       return date.toLocaleString('en-US', {
+        timeZone: 'Asia/Seoul',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -607,6 +609,7 @@ export default function Admin() {
       });
     } else {
       return date.toLocaleString('zh-CN', {
+        timeZone: 'Asia/Seoul',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -1148,7 +1151,7 @@ export default function Admin() {
                 {modelConfig.updatedBy && (
                   <p className="text-xs text-content-quaternary mt-2">
                     Updated by {modelConfig.updatedBy}
-                    {modelConfig.updatedAt && ` at ${new Date(modelConfig.updatedAt).toLocaleString()}`}
+                    {modelConfig.updatedAt && ` at ${new Date(modelConfig.updatedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`}
                   </p>
                 )}
               </div>

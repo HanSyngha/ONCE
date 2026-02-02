@@ -82,7 +82,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging
 app.use((req, _res, next) => {
-  const timestamp = new Date().toISOString();
+  const timestamp = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' });
   console.log(`[${timestamp}] ${req.method} ${req.path}`);
   next();
 });
@@ -98,7 +98,7 @@ app.get('/health', async (_req, res) => {
 
     res.json({
       status: 'ok',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
       services: {
         database: 'ok',
         redis: 'ok',
@@ -108,7 +108,7 @@ app.get('/health', async (_req, res) => {
     console.error('Health check failed:', error);
     res.status(503).json({
       status: 'error',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
@@ -165,7 +165,7 @@ function scheduleHistoryCleanup(): void {
         .finally(() => scheduleHistoryCleanup()); // Reschedule for next day
     }, delay);
 
-    console.log(`[HistoryCleanup] Scheduled for ${next3AM.toISOString()}`);
+    console.log(`[HistoryCleanup] Scheduled for ${next3AM.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' })}`);
   };
 
   runAt3AM();

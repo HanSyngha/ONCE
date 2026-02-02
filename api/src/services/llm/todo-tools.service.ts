@@ -212,7 +212,7 @@ export async function executeTodoTool(
 
         return {
           success: true,
-          message: `Todo added: "${todo.title}" (${parsedStart.toISOString().split('T')[0]} ~ ${parsedEnd.toISOString().split('T')[0]})`,
+          message: `Todo added: "${todo.title}" (${parsedStart.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })} ~ ${parsedEnd.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })})`,
           data: { todoId: todo.id },
         };
       }
@@ -300,7 +300,7 @@ export async function executeTodoTool(
 
         return {
           success: true,
-          message: `Todo updated: "${todo.title}" → ${(finalStart as Date).toISOString().split('T')[0]} ~ ${(finalEnd as Date).toISOString().split('T')[0]}`,
+          message: `Todo updated: "${todo.title}" → ${(finalStart as Date).toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })} ~ ${(finalEnd as Date).toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })}`,
           data: { todoId: todo.id },
         };
       }

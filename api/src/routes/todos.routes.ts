@@ -126,8 +126,8 @@ todosRoutes.get('/', async (req: AuthenticatedRequest, res) => {
     res.json({
       todos,
       range: {
-        start: start.toISOString(),
-        end: end.toISOString(),
+        start: start.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
+        end: end.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
         view: viewStr,
       },
     });
