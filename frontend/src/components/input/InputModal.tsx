@@ -126,6 +126,7 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
   const [showRating, setShowRating] = useState(false);
   const [ratingModel, setRatingModel] = useState('');
   const [askUserData, setAskUserData] = useState<RequestAskUser | null>(null);
+  const askUserDataRef = useRef<RequestAskUser | null>(null);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [customAnswer, setCustomAnswer] = useState('');
   const [askDeadline, setAskDeadline] = useState<number | null>(null);
@@ -174,14 +175,16 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
             setError(req.error || t.error);
             return 'failed';
           });
-        } else if (req.status === 'PROCESSING' && req.pendingQuestion && !askUserData) {
+        } else if (req.status === 'PROCESSING' && req.pendingQuestion && !askUserDataRef.current) {
           // WebSocket으로 ask_user 이벤트를 놓친 경우 polling fallback
-          setAskUserData({
+          const data = {
             requestId: rid,
             question: req.pendingQuestion.question,
             options: req.pendingQuestion.options,
             timeoutMs: req.pendingQuestion.timeoutMs,
-          });
+          };
+          askUserDataRef.current = data;
+          setAskUserData(data);
           setAskDeadline(Date.now() + req.pendingQuestion.timeoutMs);
           setSelectedOption(null);
           setCustomAnswer('');
@@ -250,6 +253,8 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
 
     const handleAskUser = (data: RequestAskUser) => {
       if (data.requestId !== requestId) return;
+      if (askUserDataRef.current) return; // 이미 질문 UI 표시 중이면 무시 (중복 이벤트 방지)
+      askUserDataRef.current = data;
       setAskUserData(data);
       setAskDeadline(Date.now() + data.timeoutMs);
       setSelectedOption(null);
@@ -349,6 +354,7 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
     setResult(null);
     setError(null);
     setAskUserData(null);
+    askUserDataRef.current = null;
     setAskDeadline(null);
     setSelectedOption(null);
     setCustomAnswer('');
