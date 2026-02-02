@@ -177,6 +177,7 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
           });
         } else if (req.status === 'PROCESSING' && req.pendingQuestion && !askUserDataRef.current) {
           // WebSocket으로 ask_user 이벤트를 놓친 경우 polling fallback
+          stopPolling(); // 질문 UI 표시 중에는 polling 불필요
           const data = {
             requestId: rid,
             question: req.pendingQuestion.question,
@@ -188,6 +189,9 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
           setAskDeadline(Date.now() + req.pendingQuestion.timeoutMs);
           setSelectedOption(null);
           setCustomAnswer('');
+        } else if (req.status === 'PROCESSING' && askUserDataRef.current) {
+          // 이미 질문 UI가 표시 중이면 polling 중지
+          stopPolling();
         }
       } catch {
         // 폴링 에러는 무시
@@ -254,6 +258,7 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
     const handleAskUser = (data: RequestAskUser) => {
       if (data.requestId !== requestId) return;
       if (askUserDataRef.current) return; // 이미 질문 UI 표시 중이면 무시 (중복 이벤트 방지)
+      stopPolling(); // 질문 UI 표시 중에는 polling 불필요
       askUserDataRef.current = data;
       setAskUserData(data);
       setAskDeadline(Date.now() + data.timeoutMs);
@@ -309,7 +314,10 @@ export default function InputModal({ isOpen, onClose, spaceId }: InputModalProps
     try {
       await requestsApi.answerQuestion(requestId, answer);
       setAskUserData(null);
+      askUserDataRef.current = null;
       setAskDeadline(null);
+      // 응답 후 polling 재개 (완료/실패 감지용)
+      startPolling(requestId);
     } catch {
       // 타임아웃 등으로 실패 시 failed 이벤트가 올 것임
     }
