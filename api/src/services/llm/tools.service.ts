@@ -259,28 +259,6 @@ export function getToolDefinitions() {
     {
       type: 'function',
       function: {
-        name: 'ask_to_user',
-        description: '사용자에게 질문합니다. 입력 내용이 모호하거나 선택이 필요할 때 사용합니다.',
-        parameters: {
-          type: 'object',
-          properties: {
-            question: {
-              type: 'string',
-              description: '사용자에게 보여줄 질문',
-            },
-            options: {
-              type: 'array',
-              items: { type: 'string' },
-              description: '객관식 선택지 (2~5개). 사용자가 "직접 입력"도 선택할 수 있음',
-            },
-          },
-          required: ['question', 'options'],
-        },
-      },
-    },
-    {
-      type: 'function',
-      function: {
         name: 'complete',
         description: '작업을 완료하고 결과를 반환합니다.',
         parameters: {

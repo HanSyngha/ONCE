@@ -11,27 +11,16 @@ import { prisma, io, redis } from '../../index.js';
 import { executeTool, getToolDefinitions, getSearchToolDefinitions, ToolResult } from './tools.service.js';
 import { getTodoToolDefinitions, executeTodoTool } from './todo-tools.service.js';
 import { updateTokenUsage, getTokenWarning, TokenUsageStatus, createAgentSession } from './token.service.js';
-import { emitRequestProgress, emitAskUser, emitRequestFailed } from '../../websocket/server.js';
+import { emitRequestProgress, emitRequestFailed } from '../../websocket/server.js';
 import { sendFailureEmail } from '../mail.service.js';
 
-// ===================== ask_to_user 대기 메커니즘 =====================
 interface UndoEntry {
   tool: string;
   params: Record<string, any>;
 }
 
-const pendingQuestions = new Map<string, {
-  resolve: (answer: string) => void;
-  reject: (error: Error) => void;
-}>();
-
-export function resolveUserAnswer(requestId: string, answer: string): boolean {
-  const pending = pendingQuestions.get(requestId);
-  if (pending) {
-    pending.resolve(answer);
-    pendingQuestions.delete(requestId);
-    return true;
-  }
+// ask_to_user는 더 이상 사용하지 않지만 routes에서 import하므로 no-op으로 유지
+export function resolveUserAnswer(_requestId: string, _answer: string): boolean {
   return false;
 }
 
@@ -233,17 +222,11 @@ ${isPersonalSpace ? '\n### 개인 공간 폴더 깊이 제한\n이 공간은 **�
 - edit_file_name(path, newName): 파일 이름 변경
 - move_file(fromPath, toPath): 파일 이동
 
-### 사용자 질문
-- ask_to_user(question, options): 사용자에게 질문합니다. 2~5개 객관식 선택지를 제공하세요.
-  - 입력 내용이 모호하여 정확한 분류/처리가 어려울 때 사용
-  - 선택지는 구체적이고 명확해야 합니다
-  - UI에서 "직접 입력" 옵션이 자동으로 추가되므로, options에 "직접 입력", "기타", "다른 작업" 같은 선택지를 포함하지 마세요
-  - 질문은 최소한으로 하세요 (꼭 필요할 때만)
-
 ### 완료
 - complete(summary): 작업 완료 선언
 
 ## 필수 규칙 (절대 위반 금지)
+- **사용자에게 절대 질문하지 마세요.** 입력이 모호하더라도 최선의 판단으로 알아서 처리하세요. 어떤 형태든 메모/노트로 저장하면 됩니다.
 - **매 응답에서 반드시 도구를 호출하세요.** 텍스트만 응답하면 안 됩니다. 항상 도구(tool) 중 하나를 호출해야 합니다. 할 일이 끝났으면 complete()를 호출하세요.
 - **한 번에 하나의 도구만 호출하세요.** 여러 도구를 동시에 호출하지 마세요.
 - **기존 파일 수정(edit_file)을 새 파일 생성(add_file)보다 항상 우선하세요.** 같은 주제/카테고리의 파일이 이미 있으면 반드시 edit_file로 내용을 추가하세요. 중복 파일 생성은 금지합니다.
@@ -375,10 +358,6 @@ italic: { "type": "text", "text": "기울임", "styles": { "italic": true } }
 - move_file(fromPath, toPath): 파일 이동
 - delete_file(path): 파일 삭제 (휴지통으로)
 - delete_folder(path): 빈 폴더 삭제
-- ask_to_user(question, options): 사용자에게 질문합니다. 2~5개 객관식 선택지를 제공하세요.
-  - 리팩토링 방향이 불확실하거나 사용자 확인이 필요할 때 사용
-  - UI에서 "직접 입력" 옵션이 자동으로 추가되므로, options에 "직접 입력", "기타", "다른 작업" 같은 선택지를 포함하지 마세요
-  - 질문은 최소한으로 하세요 (꼭 필요할 때만)
 - complete(summary): 작업 완료
 
 ## 리팩토링 절차
@@ -601,77 +580,16 @@ export async function runAgentLoop(
 
         console.log(`[Agent] Tool call: ${toolName}`, toolArgs);
 
-        // ask_to_user 처리: WebSocket으로 질문 전송 후 응답 대기
+        // ask_to_user는 더 이상 지원하지 않음 — LLM이 스스로 판단하도록 유도
         if (toolName === 'ask_to_user') {
-          // Redis에 질문 데이터 저장 (polling fallback용)
-          await redis.set(
-            `ask_user:${requestId}`,
-            JSON.stringify({ question: toolArgs.question, options: toolArgs.options, timeoutMs: 180_000 }),
-            'EX', 200
-          );
-
-          emitAskUser(io, requestId, request.user.loginid, {
-            question: toolArgs.question,
-            options: toolArgs.options,
-            timeoutMs: 180_000,
-          });
-
-          let userAnswer: string;
-          try {
-            userAnswer = await new Promise<string>((resolve, reject) => {
-              pendingQuestions.set(requestId, { resolve, reject });
-              setTimeout(() => {
-                if (pendingQuestions.has(requestId)) {
-                  pendingQuestions.delete(requestId);
-                  reject(new Error('ASK_USER_TIMEOUT'));
-                }
-              }, 180_000);
-            });
-          } catch (err) {
-            if ((err as Error).message === 'ASK_USER_TIMEOUT') {
-              console.log(`[Agent] ask_to_user timeout for request ${requestId}, reverting ${undoStack.length} changes`);
-              await redis.del(`ask_user:${requestId}`);
-              await revertChanges(spaceId, undoStack);
-              await prisma.request.update({
-                where: { id: requestId },
-                data: { status: 'CANCELLED', error: 'User response timeout' },
-              });
-              await sendFailureEmail(
-                request.user.loginid,
-                request.user.username,
-                '응답 시간 초과',
-                'AI가 질문을 보냈으나 3분 내에 응답이 없어 작업이 취소되었습니다. 진행 중이던 모든 변경이 원복되었습니다.'
-              );
-              emitRequestFailed(io, requestId, request.user.loginid, '응답 시간 초과로 작업이 취소되었습니다.');
-              throw new Error('User response timeout - all changes reverted');
-            }
-            throw err;
-          }
-
-          // Redis에서 질문 데이터 삭제
-          await redis.del(`ask_user:${requestId}`);
-
-          // 응답을 tool result로 LLM에 전달
+          console.log(`[Agent] ask_to_user blocked for request ${requestId}, nudging LLM to proceed autonomously`);
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
             name: 'ask_to_user',
-            content: JSON.stringify({ success: true, message: `사용자 응답: ${userAnswer}` }),
+            content: JSON.stringify({ success: false, message: '사용자에게 질문할 수 없습니다. 최선의 판단으로 직접 처리하세요.' }),
           });
-
-          await prisma.requestLog.create({
-            data: {
-              requestId,
-              iteration,
-              tool: toolName,
-              params: JSON.stringify(toolArgs),
-              result: JSON.stringify({ answer: userAnswer }),
-              success: true,
-              duration: 0,
-            },
-          });
-
-          continue; // 다음 iteration으로
+          continue;
         }
 
         // complete() 호출 시 종료
