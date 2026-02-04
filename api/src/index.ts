@@ -62,10 +62,15 @@ redis.on('error', (err) => {
 const app = express();
 const httpServer = createServer(app);
 
+// Parse CORS origins from comma-separated env var
+const corsOrigin = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:16001'];
+
 // Initialize Socket.IO
 export const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:16001',
+    origin: corsOrigin,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -74,7 +79,7 @@ export const io = new SocketIOServer(httpServer, {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:16001',
+  origin: corsOrigin,
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

@@ -14,34 +14,59 @@ todosRoutes.use(authenticateToken);
 todosRoutes.use(loadUserId);
 
 /**
- * 날짜 범위 계산 (주/월/년)
+ * 현재 KST 기준 날짜 정보 가져오기
+ * 서버 시간대에 관계없이 항상 KST(UTC+9) 기준으로 계산
+ */
+function getKSTDate(dateStr?: string): Date {
+  if (dateStr) {
+    // YYYY-MM-DD 형식이면 KST 자정으로 해석
+    const [y, m, d] = dateStr.split('-').map(Number);
+    // KST 자정 = UTC 전날 15:00
+    return new Date(Date.UTC(y, m - 1, d, -9, 0, 0, 0));
+  }
+  return new Date();
+}
+
+/**
+ * KST 기준 연/월/일 추출
+ */
+function getKSTParts(date: Date): { year: number; month: number; day: number; dayOfWeek: number } {
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  return {
+    year: kst.getUTCFullYear(),
+    month: kst.getUTCMonth(),
+    day: kst.getUTCDate(),
+    dayOfWeek: kst.getUTCDay(),
+  };
+}
+
+/**
+ * 날짜 범위 계산 (주/월/년) — KST 기준
  */
 function getDateRange(view: string, dateStr?: string): { start: Date; end: Date } {
-  const base = dateStr ? new Date(dateStr) : new Date();
-  // 시간대를 한국 기준으로 맞춤 (UTC+9)
-  const koreaOffset = 9 * 60 * 60 * 1000;
+  const base = getKSTDate(dateStr);
+  const { year, month, day, dayOfWeek } = getKSTParts(base);
 
   if (view === 'week') {
-    const day = base.getDay(); // 0=일, 1=월, ...
-    const diffToMon = day === 0 ? -6 : 1 - day; // 월요일로 맞춤
-    const start = new Date(base);
-    start.setDate(base.getDate() + diffToMon);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    // KST 월요일 00:00:00 = UTC (월요일 날짜 - 1) 15:00:00
+    const startDay = day + diffToMon;
+    const start = new Date(Date.UTC(year, month, startDay, -9, 0, 0, 0));
+    const end = new Date(Date.UTC(year, month, startDay + 6, -9 + 23, 59, 59, 999));
     return { start, end };
   }
 
   if (view === 'month') {
-    const start = new Date(base.getFullYear(), base.getMonth(), 1);
-    const end = new Date(base.getFullYear(), base.getMonth() + 1, 0, 23, 59, 59, 999);
+    const start = new Date(Date.UTC(year, month, 1, -9, 0, 0, 0));
+    // 다음달 0일 = 이번달 마지막 날
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const end = new Date(Date.UTC(year, month, lastDay, -9 + 23, 59, 59, 999));
     return { start, end };
   }
 
   // year
-  const start = new Date(base.getFullYear(), 0, 1);
-  const end = new Date(base.getFullYear(), 11, 31, 23, 59, 59, 999);
+  const start = new Date(Date.UTC(year, 0, 1, -9, 0, 0, 0));
+  const end = new Date(Date.UTC(year, 11, 31, -9 + 23, 59, 59, 999));
   return { start, end };
 }
 

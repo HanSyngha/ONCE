@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { prisma, io, redis } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUserId, isSuperAdmin } from '../middleware/auth.js';
-import { inputRateLimiter, searchRateLimiter } from '../middleware/rateLimit.js';
+import { inputRateLimiter, searchRateLimiter, quickAddInputRateLimiter, quickAddSearchRateLimiter } from '../middleware/rateLimit.js';
 import { addToQueue, getQueuePosition, cancelRequest } from '../services/queue/bull.service.js';
 import { resolveUserAnswer } from '../services/llm/agent.service.js';
 
@@ -514,6 +514,55 @@ requestsRoutes.delete('/:id', async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// ==================== Quick Add 공통 유틸 ====================
+
+const USER_NOT_FOUND_ERROR = {
+  error: '사용자를 찾을 수 없습니다. 이 API를 사용하려면 먼저 ONCE에 로그인해야 합니다.',
+  action: '아래 링크에 접속하여 SSO 로그인을 완료한 후 다시 시도해주세요. 로그인 전에는 이 API를 사용할 수 없습니다.',
+  loginUrl: FRONTEND_URL,
+};
+
+/**
+ * 요청 완료까지 대기 (동기 실행용)
+ * DB를 500ms 간격으로 폴링하여 COMPLETED/FAILED/CANCELLED 상태가 될 때까지 대기
+ */
+async function waitForRequestCompletion(
+  requestId: string,
+  timeoutMs: number = 120000
+): Promise<{ status: string; result: string | null; error: string | null; iterations: number; tokensUsed: number }> {
+  const pollInterval = 500;
+  const maxAttempts = Math.ceil(timeoutMs / pollInterval);
+
+  for (let i = 0; i < maxAttempts; i++) {
+    const request = await prisma.request.findUnique({
+      where: { id: requestId },
+      select: { status: true, result: true, error: true, iterations: true, tokensUsed: true },
+    });
+
+    if (!request) throw new Error('Request not found');
+
+    if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(request.status)) {
+      return request;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  return { status: 'TIMEOUT', result: null, error: '요청 처리 시간이 초과되었습니다 (2분). 잠시 후 다시 시도해주세요.', iterations: 0, tokensUsed: 0 };
+}
+
+/**
+ * loginid로 사용자 + 개인 공간 조회 (공통)
+ */
+async function findUserWithSpace(loginid: string) {
+  return prisma.user.findUnique({
+    where: { loginid },
+    include: { personalSpace: { select: { id: true } } },
+  });
+}
+
+// ==================== Quick Add Routes ====================
+
 /**
  * @swagger
  * /quick-add:
@@ -521,6 +570,7 @@ requestsRoutes.delete('/:id', async (req: AuthenticatedRequest, res) => {
  *     summary: 아무거나 추가 (개인 공간)
  *     description: |
  *       loginid로 사용자를 식별하여 개인 공간에 노트를 추가합니다.
+ *       AI가 노트를 정리 완료할 때까지 대기한 후 결과를 반환합니다.
  *       인증 없이 사용 가능합니다.
  *     tags: [Quick Add]
  *     requestBody:
@@ -543,14 +593,14 @@ requestsRoutes.delete('/:id', async (req: AuthenticatedRequest, res) => {
  *             id: "hong.gildong"
  *             input: "오늘 회의 내용 정리해줘..."
  *     responses:
- *       201:
- *         description: 요청 생성 성공
+ *       200:
+ *         description: 노트 생성 완료
  *       400:
  *         description: 잘못된 요청
  *       404:
- *         description: 사용자를 찾을 수 없음
+ *         description: 사용자를 찾을 수 없음 (ONCE 로그인 필요)
  */
-quickAddRoutes.post('/', async (req, res) => {
+quickAddRoutes.post('/', quickAddInputRateLimiter, async (req, res) => {
   try {
     const { id, input } = req.body;
 
@@ -564,16 +614,9 @@ quickAddRoutes.post('/', async (req, res) => {
       return;
     }
 
-    // loginid로 사용자 조회
-    const user = await prisma.user.findUnique({
-      where: { loginid: id },
-      include: {
-        personalSpace: { select: { id: true } },
-      },
-    });
-
+    const user = await findUserWithSpace(id);
     if (!user || !user.personalSpace) {
-      res.status(404).json({ error: `User not found. Please sign up first at ${FRONTEND_URL}`, signupUrl: FRONTEND_URL });
+      res.status(404).json(USER_NOT_FOUND_ERROR);
       return;
     }
 
@@ -593,6 +636,13 @@ quickAddRoutes.post('/', async (req, res) => {
     // 큐에 추가
     const position = await addToQueue(request.id, spaceId, 'INPUT');
 
+    // WebSocket으로 큐 상태 전송 (웹 UI 연동)
+    io.to(`user:${user.id}`).emit('queue:update', {
+      requestId: request.id,
+      position,
+      status: 'waiting',
+    });
+
     // 감사 로그
     await prisma.auditLog.create({
       data: {
@@ -607,26 +657,43 @@ quickAddRoutes.post('/', async (req, res) => {
       },
     });
 
-    // WebSocket으로 큐 상태 전송
-    io.to(`user:${user.id}`).emit('queue:update', {
-      requestId: request.id,
-      position,
-      status: 'waiting',
-    });
+    // 완료까지 대기
+    const completed = await waitForRequestCompletion(request.id);
 
-    res.status(201).json({
-      request: {
-        id: request.id,
-        status: request.status,
-        position,
-        createdAt: request.createdAt,
-      },
-      message: '입력이 접수되었습니다. 잠시 후 AI가 정리해드립니다.',
-      url: FRONTEND_URL,
-    });
+    if (completed.status === 'COMPLETED' && completed.result) {
+      let parsedResult;
+      try { parsedResult = JSON.parse(completed.result); } catch { parsedResult = {}; }
+
+      const filesCreated = parsedResult.filesCreated || [];
+      const summary = parsedResult.summary || '';
+
+      res.json({
+        success: true,
+        request: {
+          id: request.id,
+          status: 'COMPLETED',
+          iterations: completed.iterations,
+          tokensUsed: completed.tokensUsed,
+        },
+        result: {
+          filesCreated,
+          foldersCreated: parsedResult.foldersCreated || [],
+          summary,
+        },
+        message: `노트가 생성되었습니다. ${filesCreated.length}개의 파일이 생성되었습니다.${summary ? ' 요약: ' + summary : ''}`,
+        url: FRONTEND_URL,
+      });
+    } else {
+      const errorMsg = completed.error || '알 수 없는 오류가 발생했습니다.';
+      res.status(completed.status === 'TIMEOUT' ? 504 : 500).json({
+        success: false,
+        request: { id: request.id, status: completed.status },
+        error: `노트 생성에 실패했습니다: ${errorMsg}`,
+      });
+    }
   } catch (error) {
     console.error('Quick add error:', error);
-    res.status(500).json({ error: 'Failed to process quick add request' });
+    res.status(500).json({ success: false, error: 'Failed to process quick add request' });
   }
 });
 
@@ -674,7 +741,7 @@ quickAddRoutes.post('/', async (req, res) => {
  *       400:
  *         description: 잘못된 요청
  *       404:
- *         description: 사용자를 찾을 수 없음
+ *         description: 사용자를 찾을 수 없음 (ONCE 로그인 필요)
  */
 quickAddRoutes.post('/todo', async (req, res) => {
   try {
@@ -685,16 +752,9 @@ quickAddRoutes.post('/todo', async (req, res) => {
       return;
     }
 
-    // loginid로 사용자 조회
-    const user = await prisma.user.findUnique({
-      where: { loginid: id },
-      include: {
-        personalSpace: { select: { id: true } },
-      },
-    });
-
+    const user = await findUserWithSpace(id);
     if (!user || !user.personalSpace) {
-      res.status(404).json({ error: `User not found. Please sign up first at ${FRONTEND_URL}`, signupUrl: FRONTEND_URL });
+      res.status(404).json(USER_NOT_FOUND_ERROR);
       return;
     }
 
@@ -726,20 +786,25 @@ quickAddRoutes.post('/todo', async (req, res) => {
       },
     });
 
+    const startStr = parsedStart.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const endStr = parsedEnd.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+
     res.status(201).json({
+      success: true,
       todo: {
         id: todo.id,
         title: todo.title,
+        content: todo.content,
         startDate: todo.startDate,
         endDate: todo.endDate,
         completed: todo.completed,
         createdAt: todo.createdAt,
       },
-      message: 'Todo가 추가되었습니다.',
+      message: `Todo "${todo.title}"이(가) 추가되었습니다. 기간: ${startStr} ~ ${endStr}`,
     });
   } catch (error) {
     console.error('Quick add todo error:', error);
-    res.status(500).json({ error: 'Failed to create todo' });
+    res.status(500).json({ success: false, error: 'Failed to create todo' });
   }
 });
 
@@ -750,7 +815,7 @@ quickAddRoutes.post('/todo', async (req, res) => {
  *     summary: 검색 (개인 공간)
  *     description: |
  *       loginid로 사용자를 식별하여 개인 공간에서 AI 검색합니다.
- *       기존 검색 agent(SEARCH)와 동일한 로직을 사용합니다.
+ *       검색이 완료될 때까지 대기한 후 관련도순 상위 5개 결과를 반환합니다.
  *     tags: [Quick Add]
  *     parameters:
  *       - in: query
@@ -767,13 +832,13 @@ quickAddRoutes.post('/todo', async (req, res) => {
  *         description: 검색어 (자연어)
  *     responses:
  *       200:
- *         description: 검색 결과 (관련도순)
+ *         description: 검색 결과 (관련도순 상위 5개)
  *       400:
  *         description: 잘못된 요청
  *       404:
- *         description: 사용자를 찾을 수 없음
+ *         description: 사용자를 찾을 수 없음 (ONCE 로그인 필요)
  */
-quickAddRoutes.get('/search', async (req, res) => {
+quickAddRoutes.get('/search', quickAddSearchRateLimiter, async (req, res) => {
   try {
     const { id, q } = req.query;
 
@@ -782,15 +847,14 @@ quickAddRoutes.get('/search', async (req, res) => {
       return;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { loginid: id as string },
-      include: {
-        personalSpace: { select: { id: true } },
-      },
-    });
+    if ((q as string).length > 1000) {
+      res.status(400).json({ error: 'Query is too long. Maximum 1,000 characters.' });
+      return;
+    }
 
+    const user = await findUserWithSpace(id as string);
     if (!user || !user.personalSpace) {
-      res.status(404).json({ error: `User not found. Please sign up first at ${FRONTEND_URL}`, signupUrl: FRONTEND_URL });
+      res.status(404).json(USER_NOT_FOUND_ERROR);
       return;
     }
 
@@ -810,24 +874,48 @@ quickAddRoutes.get('/search', async (req, res) => {
     // 큐에 추가
     const position = await addToQueue(request.id, spaceId, 'SEARCH');
 
-    // WebSocket으로 큐 상태 전송
+    // WebSocket으로 큐 상태 전송 (웹 UI 연동)
     io.to(`user:${user.id}`).emit('queue:update', {
       requestId: request.id,
       position,
       status: 'waiting',
     });
 
-    res.json({
-      request: {
-        id: request.id,
-        status: 'PENDING',
-        position,
-      },
-      message: '검색 요청이 접수되었습니다. 결과는 비동기로 처리됩니다.',
-    });
+    // 완료까지 대기
+    const completed = await waitForRequestCompletion(request.id);
+
+    if (completed.status === 'COMPLETED' && completed.result) {
+      let parsedResult;
+      try { parsedResult = JSON.parse(completed.result); } catch { parsedResult = { results: [] }; }
+
+      const allResults = parsedResult.results || [];
+      // 관련도순 정렬 후 상위 5개
+      const top5 = allResults
+        .sort((a: { relevanceScore: number }, b: { relevanceScore: number }) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+        .slice(0, 5);
+
+      res.json({
+        success: true,
+        query: q,
+        results: top5,
+        totalFound: allResults.length,
+        message: allResults.length > 0
+          ? `${allResults.length}건 중 상위 ${top5.length}건의 검색 결과를 반환합니다.`
+          : `"${q}"에 대한 검색 결과가 없습니다.`,
+      });
+    } else {
+      const errorMsg = completed.error || '알 수 없는 오류가 발생했습니다.';
+      res.status(completed.status === 'TIMEOUT' ? 504 : 500).json({
+        success: false,
+        query: q,
+        results: [],
+        totalFound: 0,
+        error: `검색에 실패했습니다: ${errorMsg}`,
+      });
+    }
   } catch (error) {
     console.error('Quick search error:', error);
-    res.status(500).json({ error: 'Failed to process search request' });
+    res.status(500).json({ success: false, error: 'Failed to process search request' });
   }
 });
 
@@ -869,15 +957,9 @@ quickAddRoutes.get('/todos', async (req, res) => {
       return;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { loginid: id as string },
-      include: {
-        personalSpace: { select: { id: true } },
-      },
-    });
-
+    const user = await findUserWithSpace(id as string);
     if (!user || !user.personalSpace) {
-      res.status(404).json({ error: `User not found. Please sign up first at ${FRONTEND_URL}`, signupUrl: FRONTEND_URL });
+      res.status(404).json(USER_NOT_FOUND_ERROR);
       return;
     }
 
@@ -916,17 +998,26 @@ quickAddRoutes.get('/todos', async (req, res) => {
       },
     });
 
+    const completedCount = todos.filter(t => t.completed).length;
+    const pendingCount = todos.length - completedCount;
+    const startStr = start.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const endStr = end.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+
     res.json({
+      success: true,
       todos,
       range: {
         start: start.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
         end: end.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }),
       },
       total: todos.length,
+      completedCount,
+      pendingCount,
+      message: `${startStr} ~ ${endStr} 기간의 Todo ${todos.length}건 (완료 ${completedCount}건, 미완료 ${pendingCount}건)`,
     });
   } catch (error) {
     console.error('Quick todos list error:', error);
-    res.status(500).json({ error: 'Failed to get todos' });
+    res.status(500).json({ success: false, error: 'Failed to get todos' });
   }
 });
 
@@ -982,7 +1073,7 @@ quickAddRoutes.patch('/todos', async (req, res) => {
     });
 
     if (!user) {
-      res.status(404).json({ error: `User not found. Please sign up first at ${FRONTEND_URL}`, signupUrl: FRONTEND_URL });
+      res.status(404).json(USER_NOT_FOUND_ERROR);
       return;
     }
 
@@ -999,22 +1090,38 @@ quickAddRoutes.patch('/todos', async (req, res) => {
     }
 
     const updateData: Record<string, any> = {};
+    const changedFields: string[] = [];
 
     if (typeof completed === 'boolean') {
       updateData.completed = completed;
       updateData.completedAt = completed ? new Date() : null;
+      changedFields.push(completed ? '완료 처리' : '미완료로 변경');
     }
     if (typeof title === 'string' && title.trim()) {
       updateData.title = title.trim();
+      changedFields.push(`제목 → "${title.trim()}"`);
     }
     if (typeof content === 'string') {
       updateData.content = content;
+      changedFields.push('내용 수정');
     }
     if (startDate) {
-      updateData.startDate = new Date(startDate);
+      const parsed = new Date(startDate);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: 'Invalid startDate format. Use YYYY-MM-DD.' });
+        return;
+      }
+      updateData.startDate = parsed;
+      changedFields.push(`시작일 → ${startDate}`);
     }
     if (endDate) {
-      updateData.endDate = new Date(endDate);
+      const parsed = new Date(endDate);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: 'Invalid endDate format. Use YYYY-MM-DD.' });
+        return;
+      }
+      updateData.endDate = parsed;
+      changedFields.push(`종료일 → ${endDate}`);
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -1028,6 +1135,7 @@ quickAddRoutes.patch('/todos', async (req, res) => {
     });
 
     res.json({
+      success: true,
       todo: {
         id: updated.id,
         title: updated.title,
@@ -1037,10 +1145,11 @@ quickAddRoutes.patch('/todos', async (req, res) => {
         completed: updated.completed,
         completedAt: updated.completedAt,
       },
-      message: 'Todo가 수정되었습니다.',
+      changes: changedFields,
+      message: `Todo "${updated.title}" 수정 완료: ${changedFields.join(', ')}`,
     });
   } catch (error) {
     console.error('Quick update todo error:', error);
-    res.status(500).json({ error: 'Failed to update todo' });
+    res.status(500).json({ success: false, error: 'Failed to update todo' });
   }
 });

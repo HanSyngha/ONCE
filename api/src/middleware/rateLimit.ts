@@ -95,3 +95,64 @@ export const inputRateLimiter = createRateLimiter('input');
  * 검색 요청 Rate Limiter (분당 10회)
  */
 export const searchRateLimiter = createRateLimiter('search');
+
+/**
+ * Quick-add용 Rate limiter (인증 없이 loginid 기반)
+ * req.body.id 또는 req.query.id에서 loginid를 추출하여 제한
+ */
+export function createQuickAddRateLimiter(type: 'input' | 'search') {
+  const config = CONFIGS[type];
+
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const loginid = (req.body?.id || req.query?.id) as string;
+
+    if (!loginid) {
+      // 검증은 핸들러에서 처리 — 여기서는 통과
+      next();
+      return;
+    }
+
+    const key = `${config.keyPrefix}:quickadd:${loginid}`;
+
+    try {
+      const script = `
+        local current = redis.call('INCR', KEYS[1])
+        if current == 1 then
+          redis.call('EXPIRE', KEYS[1], ARGV[1])
+        end
+        return current
+      `;
+
+      const count = await redis.eval(
+        script,
+        1,
+        key,
+        config.windowSeconds.toString()
+      ) as number;
+
+      res.setHeader('X-RateLimit-Limit', config.maxRequests);
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, config.maxRequests - count));
+
+      const ttl = await redis.ttl(key);
+      res.setHeader('X-RateLimit-Reset', Math.ceil(Date.now() / 1000) + ttl);
+
+      if (count > config.maxRequests) {
+        console.log(`[RateLimit] quickadd:${type} exceeded for ${loginid}: ${count}/${config.maxRequests}`);
+        res.status(429).json({
+          error: 'Too many requests',
+          message: `${type === 'input' ? '입력' : '검색'} 요청은 분당 ${config.maxRequests}회로 제한됩니다. 잠시 후 다시 시도해주세요.`,
+          retryAfter: ttl,
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Quick-add rate limit check error:', error);
+      next();
+    }
+  };
+}
+
+export const quickAddInputRateLimiter = createQuickAddRateLimiter('input');
+export const quickAddSearchRateLimiter = createQuickAddRateLimiter('search');

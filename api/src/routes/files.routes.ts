@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticateToken, AuthenticatedRequest, loadUserId, isSuperAdmin } from '../middleware/auth.js';
+import { addToQueue } from '../services/queue/bull.service.js';
 
 export const filesRoutes = Router();
 
@@ -401,6 +402,9 @@ filesRoutes.post('/:id/retry-translation/:lang', async (req: AuthenticatedReques
         status: 'PENDING',
       },
     });
+
+    // 큐에 추가
+    await addToQueue(request.id, file.spaceId, 'INPUT');
 
     // 감사 로그
     await prisma.auditLog.create({
