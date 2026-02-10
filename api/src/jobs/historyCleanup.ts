@@ -2,7 +2,7 @@
  * History Cleanup Job
  *
  * - 30일 지난 히스토리 자동 삭제
- * - 삭제 7일/1일 전 Knox Mail 알림 발송
+ * - 삭제 7일/1일 전 이메일 알림 발송
  */
 
 import { prisma } from '../db.js';
@@ -80,7 +80,7 @@ export async function sendExpiryNotifications(): Promise<void> {
       });
 
       if (user) {
-        const fileUrl = `${process.env.FRONTEND_URL || 'http://localhost:16001'}/note/${fileId}`;
+        const fileUrl = `${process.env.FRONTEND_URL || 'http://localhost:5090'}/note/${fileId}`;
 
         await sendHistoryExpiryEmail(
           user.loginid,

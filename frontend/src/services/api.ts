@@ -33,9 +33,6 @@ api.interceptors.response.use(
 
 // ==================== Auth API ====================
 export const authApi = {
-  login: (ssoToken: string) =>
-    api.post('/auth/login', {}, { headers: { Authorization: `Bearer ${ssoToken}` } }),
-
   me: () => api.get('/auth/me'),
 
   check: () => api.get('/auth/check'),
@@ -164,7 +161,7 @@ export const adminApi = {
 };
 
 // ==================== Rating API (Dashboard) ====================
-const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || 'http://a2g.samsungds.net:4090';
+const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || '';
 
 export const ratingApi = {
   submit: (modelName: string, rating: number) => {

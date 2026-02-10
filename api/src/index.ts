@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 
 // Routes
 import { authRoutes } from './routes/auth.routes.js';
+import { oauthRoutes } from './routes/oauth.routes.js';
 import { spacesRoutes } from './routes/spaces.routes.js';
 import { filesRoutes } from './routes/files.routes.js';
 import { requestsRoutes, quickAddRoutes } from './routes/requests.routes.js';
@@ -42,7 +43,7 @@ import { prisma } from './db.js';
 export { prisma };
 
 // Initialize Redis
-export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:16004', {
+export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: 3,
   retryStrategy(times) {
     const delay = Math.min(times * 50, 2000);
@@ -65,7 +66,7 @@ const httpServer = createServer(app);
 // Parse CORS origins from comma-separated env var
 const corsOrigin = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-  : ['http://localhost:16001'];
+  : ['http://localhost:5090'];
 
 // Initialize Socket.IO
 export const io = new SocketIOServer(httpServer, {
@@ -121,6 +122,7 @@ app.get('/health', async (_req, res) => {
 
 // API Routes (nginx strips /api/ prefix)
 app.use('/auth', authRoutes);
+app.use('/auth', oauthRoutes);
 app.use('/spaces', spacesRoutes);
 app.use('/files', filesRoutes);
 app.use('/requests', requestsRoutes);
@@ -181,7 +183,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Start server
-const PORT = parseInt(process.env.PORT || '16002', 10);
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 httpServer.listen(PORT, () => {
   console.log(`

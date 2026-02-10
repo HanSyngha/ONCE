@@ -98,8 +98,8 @@ log_info "Total backup directory size: $TOTAL_SIZE"
 
 log_info "Backup process completed."
 
-# Optional: Send notification (uncomment if Knox Mail is configured)
-# curl -X POST "$KNOX_MAIL_URL" \
+# Optional: Send notification (uncomment if mail API is configured)
+# curl -X POST "$MAIL_API_URL" \
 #     -H "Content-Type: application/json" \
 #     -d "{
 #         \"to\": \"$ADMIN_EMAIL\",
