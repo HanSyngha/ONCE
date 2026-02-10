@@ -1,12 +1,12 @@
 /**
- * Knox Mail Service
+ * Mail Service
  *
- * Knox Mail API를 통한 메일 발송
+ * 메일 발송 서비스 (SMTP 또는 외부 API)
  */
 
-const KNOX_MAIL_URL = process.env.KNOX_MAIL_URL || 'http://genai.samsungds.net:20080/knox/mail/send';
+const MAIL_API_URL = process.env.MAIL_API_URL || '';
 const SERVICE_NAME = 'ONCE';
-const BASE_URL = process.env.FRONTEND_URL || 'http://localhost:16001';
+const BASE_URL = process.env.FRONTEND_URL || 'http://localhost:5090';
 
 interface MailContent {
   subject: string;
@@ -20,8 +20,13 @@ async function sendMail(
   toEmail: string,
   content: MailContent
 ): Promise<boolean> {
+  if (!MAIL_API_URL) {
+    console.log(`[Mail] Mail service not configured. Would send to ${toEmail}: ${content.subject}`);
+    return false;
+  }
+
   try {
-    const response = await fetch(KNOX_MAIL_URL, {
+    const response = await fetch(MAIL_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -48,11 +53,14 @@ async function sendMail(
 }
 
 /**
- * 사용자 이메일 주소 생성
+ * 사용자 이메일 주소 조회
+ * OAuth 기반이므로 loginid가 이메일 형식일 수 있음
  */
 function getUserEmail(loginid: string): string {
-  // Samsung DS 이메일 형식
-  return `${loginid}@samsung.com`;
+  // loginid가 이미 이메일 형식이면 그대로 사용
+  if (loginid.includes('@')) return loginid;
+  // 아니면 빈 문자열 (메일 발송 불가)
+  return '';
 }
 
 /**

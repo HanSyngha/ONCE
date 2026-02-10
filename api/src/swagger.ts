@@ -33,14 +33,13 @@ AI가 자동으로 노트를 정리해주는 서비스의 REST API 문서입니�
 
 ## 지원
 
-문의: [Dashboard Feedback](https://a2g.samsungds.net/feedback)
+문의: syngha.han
       `,
       contact: {
         name: 'syngha.han',
-        email: 'syngha.han@samsung.com',
       },
       license: {
-        name: 'Internal Use Only',
+        name: 'MIT',
       },
     },
     servers: [
@@ -55,7 +54,7 @@ AI가 자동으로 노트를 정리해주는 서비스의 REST API 문서입니�
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'SSO 로그인 후 발급받은 JWT 토큰',
+          description: 'OAuth 로그인 후 발급받은 JWT 토큰',
         },
       },
       schemas: {

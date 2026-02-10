@@ -322,7 +322,7 @@ filesRoutes.post('/:id/share', async (req: AuthenticatedRequest, res) => {
     }
 
     // 공유 링크 URL 생성
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:16001';
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5090';
     const shareUrl = `${baseUrl}/note/${file.id}`;
 
     // 감사 로그
@@ -338,7 +338,7 @@ filesRoutes.post('/:id/share', async (req: AuthenticatedRequest, res) => {
 
     res.json({
       shareUrl,
-      message: '공유 링크가 생성되었습니다. SSO 로그인한 팀원만 접근할 수 있습니다.',
+      message: '공유 링크가 생성되었습니다. 로그인한 팀원만 접근할 수 있습니다.',
     });
   } catch (error) {
     console.error('Share file error:', error);

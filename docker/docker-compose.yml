@@ -1,64 +1,51 @@
-name: once
-version: '3.8'
-
-# Proxy 설정 (Dashboard와 동일 패턴)
-x-proxy-env: &proxy-env
-  HTTP_PROXY: ${HTTP_PROXY:-}
-  HTTPS_PROXY: ${HTTPS_PROXY:-}
-  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,genai.samsungds.net}
-  http_proxy: ${HTTP_PROXY:-}
-  https_proxy: ${HTTPS_PROXY:-}
-  no_proxy: ${NO_PROXY:-localhost,127.0.0.1,genai.samsungds.net}
-  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+name: once-main
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database (internal only)
   postgres:
     image: postgres:15-alpine
-    container_name: once-postgres
+    container_name: once-main-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-once}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-once_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-once_web}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "16003:5432"
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-once} -d ${POSTGRES_DB:-once_web}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - once-network
+      - once-main-network
 
-  # Redis
+  # Redis Cache (internal only)
   redis:
     image: redis:7-alpine
-    container_name: once-redis
+    container_name: once-main-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
-    ports:
-      - "16004:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - once-network
+      - once-main-network
 
-  # API Server
+  # API Server (internal only, accessed via Nginx)
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile.api
-      args:
-        <<: *proxy-env
-    container_name: once-api
+    container_name: once-main-api
     restart: unless-stopped
     depends_on:
       postgres:
@@ -67,51 +54,66 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      PORT: 16002
-      DATABASE_URL: postgresql://${POSTGRES_USER:-once}:${POSTGRES_PASSWORD:-once_secret}@postgres:5432/${POSTGRES_DB:-once_web}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-once}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-once_web}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_SECRET: ${JWT_SECRET}
       DEVELOPERS: ${DEVELOPERS:-}
-      LLM_PROXY_URL: ${LLM_PROXY_URL:-http://a2g.samsungds.net:4090/proxy/chat/completions}
+      LLM_PROXY_URL: ${LLM_PROXY_URL}
       LLM_SERVICE_ID: ${LLM_SERVICE_ID:-once}
-      KNOX_MAIL_API_URL: ${KNOX_MAIL_API_URL:-http://genai.samsungds.net:20080/knox/mail/send}
-      KNOX_MAIL_API_KEY: ${KNOX_MAIL_API_KEY:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://a2g.samsungds.net:16001}
+      DASHBOARD_URL: ${DASHBOARD_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PUBLIC_URL: ${PUBLIC_URL}
     volumes:
       - api_logs:/app/logs
+    expose:
+      - "3000"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:16002/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
     networks:
-      - once-network
+      - once-main-network
 
-  # Frontend (Nginx)
+  # Frontend SPA (internal only, accessed via Nginx)
   frontend:
     build:
       context: ..
       dockerfile: docker/Dockerfile.frontend
       args:
-        <<: *proxy-env
         VITE_API_URL: /api
         VITE_WS_URL: ""
-        VITE_SSO_URL: https://genai.samsungds.net:36810
-    container_name: once-frontend
+        VITE_DASHBOARD_URL: ${DASHBOARD_URL}
+    container_name: once-main-frontend
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
-    ports:
-      - "16001:80"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    expose:
+      - "80"
     networks:
-      - once-network
+      - once-main-network
+
+  # Nginx Reverse Proxy (HTTPS, single entry point)
+  nginx:
+    image: nginx:alpine
+    container_name: once-main-proxy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ../nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ${CERTBOT_CONF_PATH:-/home/ubuntu/dashboard/certbot/conf}:/etc/letsencrypt:ro
+    command: /bin/sh -c "envsubst '$$DOMAIN' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
+    ports:
+      - "${PROXY_PORT:-5090}:5090"
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - once-main-network
 
 volumes:
   postgres_data:
@@ -122,5 +124,5 @@ volumes:
     driver: local
 
 networks:
-  once-network:
+  once-main-network:
     driver: bridge

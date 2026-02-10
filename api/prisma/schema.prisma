@@ -13,10 +13,16 @@ model User {
   id           String   @id @default(cuid())
   loginid      String   @unique
   username     String
-  deptname     String
-  businessUnit String
+  deptname     String   @default("")
+  businessUnit String   @default("")
   createdAt    DateTime @default(now())
   lastActive   DateTime @default(now())
+
+  // OAuth fields
+  provider     String   @default("")
+  providerId   String   @default("")
+  email        String?
+  profileImage String?
 
   personalSpace   Space?       @relation("PersonalSpace")
   teamMemberships TeamMember[]
@@ -26,9 +32,17 @@ model User {
   auditLogs       AuditLog[]
   todos           Todo[]
 
+  @@unique([provider, providerId])
   @@index([loginid])
+  @@index([email])
   @@index([deptname])
   @@index([businessUnit])
+}
+
+model Admin {
+  id    String @id @default(cuid())
+  email String @unique
+  role  String @default("SUPER_ADMIN")
 }
 
 model Team {

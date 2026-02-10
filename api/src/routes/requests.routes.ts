@@ -11,7 +11,7 @@ import { inputRateLimiter, searchRateLimiter, quickAddInputRateLimiter, quickAdd
 import { addToQueue, getQueuePosition, cancelRequest } from '../services/queue/bull.service.js';
 import { resolveUserAnswer } from '../services/llm/agent.service.js';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://a2g.samsungds.net:16001';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5090';
 
 export const requestsRoutes = Router();
 export const quickAddRoutes = Router();
@@ -518,7 +518,7 @@ requestsRoutes.delete('/:id', async (req: AuthenticatedRequest, res) => {
 
 const USER_NOT_FOUND_ERROR = {
   error: '사용자를 찾을 수 없습니다. 이 API를 사용하려면 먼저 ONCE에 로그인해야 합니다.',
-  action: '아래 링크에 접속하여 SSO 로그인을 완료한 후 다시 시도해주세요. 로그인 전에는 이 API를 사용할 수 없습니다.',
+  action: '아래 링크에 접속하여 로그인을 완료한 후 다시 시도해주세요. 로그인 전에는 이 API를 사용할 수 없습니다.',
   loginUrl: FRONTEND_URL,
 };
 

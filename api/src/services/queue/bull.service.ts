@@ -15,7 +15,7 @@ const MAX_CONCURRENT_JOBS = 20;
 
 // BullMQ 연결 설정 (REDIS_URL 파싱)
 function getRedisConnection() {
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:16004';
+  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
   const url = new URL(redisUrl);
   return {
     host: url.hostname,
