@@ -191,18 +191,6 @@ export const ratingApi = {
   },
 };
 
-// ==================== Todos API ====================
-export const todosApi = {
-  list: (spaceId: string, view: 'week' | 'month' | 'year' = 'week', date?: string) =>
-    api.get('/todos', { params: { spaceId, view, date } }),
-
-  update: (todoId: string, data: { completed?: boolean; title?: string; startDate?: string; endDate?: string }) =>
-    api.patch(`/todos/${todoId}`, data),
-
-  delete: (todoId: string) =>
-    api.delete(`/todos/${todoId}`),
-};
-
 // ==================== Settings API ====================
 export const settingsApi = {
   get: () => api.get('/settings'),

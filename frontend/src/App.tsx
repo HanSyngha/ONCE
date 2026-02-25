@@ -10,7 +10,7 @@ import Search from '@/pages/Search';
 import Trash from '@/pages/Trash';
 import Settings from '@/pages/Settings';
 import Admin from '@/pages/Admin';
-import Todo from '@/pages/Todo';
+
 
 function App() {
   const { user, setUser, isLoading, setIsLoading } = useAuthStore();
@@ -91,7 +91,6 @@ function App() {
         <Route path="/note/:fileId" element={<Note />} />
         <Route path="/search" element={<Search />} />
         <Route path="/trash" element={<Trash />} />
-        <Route path="/todo" element={<Todo />} />
         <Route path="/settings" element={<Settings />} />
 
         {/* Admin pages */}

@@ -24,7 +24,6 @@ model User {
   comments        Comment[]
   requests        Request[]
   auditLogs       AuditLog[]
-  todos           Todo[]
 
   @@index([loginid])
   @@index([deptname])
@@ -88,7 +87,6 @@ model Space {
   files     File[]
   requests  Request[]
   auditLogs AuditLog[]
-  todos     Todo[]
 
   @@index([type])
 }
@@ -318,26 +316,3 @@ model UserSetting {
   @@index([userId])
 }
 
-// ==================== Todo ====================
-
-model Todo {
-  id          String    @id @default(cuid())
-  userId      String
-  spaceId     String
-  title       String
-  content     String?   @db.Text
-  startDate   DateTime  @default(now())
-  endDate     DateTime
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([spaceId])
-  @@index([completed])
-  @@index([startDate, endDate])
-}

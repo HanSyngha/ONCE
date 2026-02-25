@@ -9,7 +9,7 @@
 
 import { prisma, io, redis } from '../../index.js';
 import { executeTool, getToolDefinitions, getSearchToolDefinitions, ToolResult } from './tools.service.js';
-import { getTodoToolDefinitions, executeTodoTool } from './todo-tools.service.js';
+
 import { updateTokenUsage, getTokenWarning, TokenUsageStatus, createAgentSession } from './token.service.js';
 import { emitRequestProgress, emitRequestFailed } from '../../websocket/server.js';
 import { sendFailureEmail } from '../mail.service.js';
@@ -169,7 +169,14 @@ interface AgentResult {
  * 시스템 프롬프트 생성
  */
 function getSystemPrompt(type: 'INPUT' | 'SEARCH' | 'REFACTOR', treeStructure: string, isPersonalSpace: boolean = false): string {
-  const basePrompt = `당신은 ONCE의 AI 어시스턴트입니다.
+  const today = new Date();
+  const todayStr = today.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+  const dayOfWeek = today.toLocaleDateString('ko-KR', { weekday: 'long', timeZone: 'Asia/Seoul' });
+
+  const basePrompt = `## 오늘 날짜
+${todayStr} (${dayOfWeek})
+
+당신은 ONCE의 AI 어시스턴트입니다.
 사용자의 입력을 분석하여 노트를 자동으로 정리하고 저장합니다.
 
 ## 전체 파일 트리 구조
@@ -819,175 +826,3 @@ async function getTreeStructure(spaceId: string): Promise<string> {
   return lines.join('\n');
 }
 
-/**
- * Todo Agent Loop
- *
- * 매 INPUT 요청 시 병렬로 실행되는 Todo 전용 agent.
- * 사용자 입력에서 action item을 추출하여 Todo를 추가/완료/수정합니다.
- * - 최대 50 iterations
- * - tool_choice: required
- * - nothing_more_todo 호출 시 종료
- */
-const TODO_MAX_ITERATIONS = 50;
-
-export async function runTodoAgentLoop(
-  requestId: string,
-  userId: string,
-  spaceId: string,
-  userInput: string
-): Promise<void> {
-  // 사용자 정보 조회
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { loginid: true, username: true, deptname: true },
-  });
-
-  if (!user) {
-    console.error(`[TodoAgent] User not found: ${userId}`);
-    return;
-  }
-
-  // 현재 Todo 목록 조회 (미완료 + 최근 완료 포함, 최대 200개)
-  const currentTodos = await prisma.todo.findMany({
-    where: { userId, spaceId },
-    orderBy: [
-      { completed: 'asc' },
-      { startDate: 'asc' },
-    ],
-    take: 200,
-  });
-
-  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
-
-  const todoListStr = currentTodos.length > 0
-    ? currentTodos.map(t => {
-        const status = t.completed ? '✅ 완료' : '⬜ 미완료';
-        const start = t.startDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
-        const end = t.endDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
-        return `- [${status}] ${t.title} (${start} ~ ${end})${t.content ? ` — ${t.content}` : ''}`;
-      }).join('\n')
-    : '(등록된 Todo 없음)';
-
-  const systemPrompt = `당신은 ONCE의 Todo 추출 에이전트입니다.
-사용자의 입력을 분석하여 할일(action item)을 추출하고 Todo를 관리합니다.
-
-## 오늘 날짜
-${todayStr}
-
-## 사용자 정보
-- 이름: ${user.username}
-- 부서: ${user.deptname}
-
-## 현재 Todo 목록
-${todoListStr}
-
-## 사용 가능한 도구
-- add_todo(title, content?, startDate?, endDate?): 새 Todo 추가. 기본값: startDate=오늘, endDate=1년 후
-- complete_todo(title): 제목으로 기존 Todo를 완료 처리
-- update_todo(title, startDate?, endDate?): 제목으로 기존 Todo의 기간 수정
-- delete_todo(title): 제목으로 기존 Todo를 삭제
-- nothing_more_todo(): 더 이상 처리할 Todo가 없을 때 호출
-
-## 규칙
-1. 사용자 입력에서 할일, 해야 할 작업, 약속, 일정 등을 모두 추출하세요.
-2. 이미 완료된 작업이 언급되면 complete_todo로 완료 처리하세요.
-3. 기간 변경이 언급되면 update_todo로 수정하세요.
-4. 중복 Todo를 만들지 마세요. 현재 Todo 목록을 확인하세요.
-5. 한 번에 하나의 도구만 호출하세요.
-6. 모든 Todo 추가/수정/완료 작업을 마친 후 반드시 nothing_more_todo를 호출하세요.
-7. 입력에 할일이 전혀 없다면 즉시 nothing_more_todo를 호출하세요.
-8. Todo 제목은 한국어로 간결하게 작성하세요.`;
-
-  const messages: LLMMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userInput },
-  ];
-
-  const todoTools = getTodoToolDefinitions();
-  let iteration = 0;
-  let retryCount = 0;
-
-  while (iteration < TODO_MAX_ITERATIONS) {
-    iteration++;
-
-    console.log(`[TodoAgent] Iteration ${iteration} for request ${requestId}`);
-
-    try {
-      const response = await callLLM(messages, user, todoTools);
-
-      const choice = response.choices[0];
-      if (!choice) {
-        throw new Error('No response from LLM');
-      }
-
-      const assistantMessage = choice.message;
-
-      // 히스토리에 추가
-      messages.push({
-        role: 'assistant',
-        content: assistantMessage.content ?? '',
-        tool_calls: assistantMessage.tool_calls,
-      });
-
-      // tool call 필수
-      if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
-        throw new Error('LLM returned no tool call with tool_choice=required');
-      }
-
-      // 첫 번째 tool call만 처리 (한 번에 하나)
-      const toolCall = assistantMessage.tool_calls[0];
-      const toolName = toolCall.function.name;
-      let toolArgs: Record<string, any>;
-
-      try {
-        toolArgs = JSON.parse(toolCall.function.arguments);
-      } catch {
-        toolArgs = {};
-      }
-
-      console.log(`[TodoAgent] Tool call: ${toolName}`, toolArgs);
-
-      // nothing_more_todo → 종료
-      if (toolName === 'nothing_more_todo') {
-        console.log(`[TodoAgent] Completed for request ${requestId} after ${iteration} iterations`);
-        return;
-      }
-
-      // 도구 실행
-      const toolResult = await executeTodoTool(userId, spaceId, toolName, toolArgs);
-
-      console.log(`[TodoAgent] Tool result: ${toolResult.message}`);
-
-      // 도구 결과를 히스토리에 추가
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        name: toolName,
-        content: JSON.stringify(toolResult),
-      });
-
-      // done 플래그 (방어적 체크)
-      if (toolResult.done) {
-        console.log(`[TodoAgent] Done flag received for request ${requestId}`);
-        return;
-      }
-
-      // 성공 시 retry 카운터 리셋
-      retryCount = 0;
-
-    } catch (error) {
-      retryCount++;
-      console.error(`[TodoAgent] Iteration ${iteration} error (retry ${retryCount}/3):`, error);
-
-      if (retryCount >= 3) {
-        console.error(`[TodoAgent] Max retries reached for request ${requestId}, stopping`);
-        return;
-      }
-
-      // 재시도 대기
-      await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-    }
-  }
-
-  console.warn(`[TodoAgent] Max iterations (${TODO_MAX_ITERATIONS}) reached for request ${requestId}`);
-}

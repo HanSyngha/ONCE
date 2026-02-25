@@ -20,7 +20,7 @@ import { commentsRoutes } from './routes/comments.routes.js';
 import { trashRoutes } from './routes/trash.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { settingsRoutes } from './routes/settings.routes.js';
-import { todosRoutes } from './routes/todos.routes.js';
+
 
 // WebSocket
 import { setupWebSocket } from './websocket/server.js';
@@ -129,7 +129,7 @@ app.use('/comments', commentsRoutes);
 app.use('/trash', trashRoutes);
 app.use('/admin', adminRoutes);
 app.use('/settings', settingsRoutes);
-app.use('/todos', todosRoutes);
+
 
 // Setup Swagger API docs
 setupSwagger(app);
@@ -154,15 +154,23 @@ setupWebSocket(io);
 // Initialize Queue
 initializeQueue();
 
-// Schedule history cleanup job (runs daily at 3 AM)
+// Schedule history cleanup job (runs daily at KST 3 AM)
 function scheduleHistoryCleanup(): void {
-  const runAt3AM = () => {
+  const runAt3AMKST = () => {
     const now = new Date();
-    const next3AM = new Date(now);
-    next3AM.setDate(next3AM.getDate() + (now.getHours() >= 3 ? 1 : 0));
-    next3AM.setHours(3, 0, 0, 0);
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(now.getTime() + kstOffset);
 
-    const delay = next3AM.getTime() - now.getTime();
+    // KST 기준 다음 3AM 계산
+    const next3AMKST = new Date(kstNow);
+    next3AMKST.setUTCHours(3, 0, 0, 0);
+    if (kstNow.getUTCHours() >= 3) {
+      next3AMKST.setUTCDate(next3AMKST.getUTCDate() + 1);
+    }
+
+    // UTC로 변환
+    const next3AMUTC = new Date(next3AMKST.getTime() - kstOffset);
+    const delay = next3AMUTC.getTime() - now.getTime();
 
     setTimeout(() => {
       runHistoryCleanupJob()
@@ -170,10 +178,10 @@ function scheduleHistoryCleanup(): void {
         .finally(() => scheduleHistoryCleanup()); // Reschedule for next day
     }, delay);
 
-    console.log(`[HistoryCleanup] Scheduled for ${next3AM.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' })}`);
+    console.log(`[HistoryCleanup] Scheduled for ${next3AMUTC.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' })} KST`);
   };
 
-  runAt3AM();
+  runAt3AMKST();
 }
 
 if (process.env.NODE_ENV === 'production') {
